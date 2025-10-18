@@ -6,6 +6,7 @@ import {
   CommandExecutor,
   PlanValidator,
   ResponseParser,
+  TaskPhaseTracker,
   ToolRegistry,
   createMediaAgent
 } from '../src/agent/index.js';
@@ -16,6 +17,7 @@ const toolRegistry = ToolRegistry.createDefault();
 async function runTests() {
   await testResponseParser();
   await testPlanValidator();
+  await testTaskPhaseTracker();
   await testCommandExecutorWithNone();
   await testMediaAgentWithMockClient();
   await cleanup();
@@ -91,6 +93,25 @@ async function testPlanValidator() {
   assert.equal(threw, true);
 }
 
+async function testTaskPhaseTracker() {
+  const tracker = new TaskPhaseTracker([
+    { id: 'plan', title: 'Plan command' },
+    { id: 'execute', title: 'Execute command' }
+  ]);
+  tracker.start('plan');
+  tracker.log('plan', 'starting planner');
+  tracker.complete('plan', { command: 'none' });
+  tracker.start('execute');
+  tracker.fail('execute', new Error('mock failure'));
+
+  const phases = tracker.getPhases();
+  assert.equal(phases.length, 2);
+  assert.equal(phases[0].status, 'success');
+  assert.equal(phases[0].logs.length, 1);
+  assert.equal(phases[1].status, 'failed');
+  assert.ok(phases[1].error);
+}
+
 async function testCommandExecutorWithNone() {
   const validator = new PlanValidator(toolRegistry);
   const executor = new CommandExecutor();
@@ -119,6 +140,7 @@ async function testCommandExecutorWithNone() {
   assert.equal(result.stderr, '');
   assert.equal(result.resolvedOutputs.length, 1);
   assert.equal(result.resolvedOutputs[0].exists, false);
+  assert.equal(result.dryRun, true);
 }
 
 async function testMediaAgentWithMockClient() {
@@ -140,18 +162,22 @@ async function testMediaAgentWithMockClient() {
   await fs.mkdir(tmpDir, { recursive: true });
 
   const agent = createMediaAgent(mockClient, { toolRegistry });
-  const { plan, result } = await agent.runTask(
+  const { plan, result, phases, debug } = await agent.runTask(
     {
       task: '何もしないでください',
       files: [],
       outputDir: tmpDir
     },
-    { publicRoot: tmpDir }
+    { publicRoot: tmpDir, dryRun: true, debug: true }
   );
 
   assert.equal(plan.command, 'none');
   assert.equal(result.exitCode, null);
   assert.ok(Array.isArray(result.resolvedOutputs));
+  assert.ok(Array.isArray(phases));
+  assert.equal(phases[0].id, 'plan');
+  assert.equal(phases[1].id, 'execute');
+  assert.ok(debug);
 }
 
 async function cleanup() {

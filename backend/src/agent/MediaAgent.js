@@ -1,6 +1,8 @@
 import { CommandExecutor } from './CommandExecutor.js';
 import { OpenAIPlanner } from './OpenAIPlanner.js';
 import { ToolRegistry } from './ToolRegistry.js';
+import { TaskPhaseTracker } from './TaskPhaseTracker.js';
+import { MediaAgentTaskError } from './errors.js';
 
 /**
  * High-level orchestrator that ties the planner and executor together.
@@ -17,13 +19,57 @@ export class MediaAgent {
 
   /**
    * @param {import('./types.js').AgentRequest} request
-   * @param {import('./types.js').CommandExecutionOptions} [options]
-   * @returns {Promise<{plan: import('./types.js').CommandPlan, result: import('./types.js').CommandExecutionResult}>}
+   * @param {import('./types.js').CommandExecutionOptions & {dryRun?: boolean, debug?: boolean, includeRawResponse?: boolean}} [options]
+   * @returns {Promise<{plan: import('./types.js').CommandPlan, result: import('./types.js').CommandExecutionResult, phases: Array<any>, debug?: Record<string, any>}>}
    */
   async runTask(request, options = {}) {
-    const plan = await this.planner.plan(request);
-    const result = await this.executor.execute(plan, options);
-    return { plan, result };
+    const { dryRun = false, debug = false, includeRawResponse = false, ...executionOptions } = options;
+    const tracker = new TaskPhaseTracker();
+
+    tracker.start('plan', { task: request.task.slice(0, 120) });
+    let plan;
+    let debugInfo;
+    try {
+      const planResult = await this.planner.plan(request, { debug, includeRawResponse });
+      plan = planResult.plan;
+      debugInfo = planResult.debug;
+      tracker.complete('plan', { command: plan.command });
+    } catch (error) {
+      tracker.fail('plan', error);
+      throw new MediaAgentTaskError('Plan phase failed', tracker.getPhases(), { cause: error });
+    }
+
+    tracker.start('execute', { dryRun });
+    let result;
+    try {
+      if (dryRun) {
+        tracker.log('execute', 'Dry-run mode enabled; skipping command execution.');
+      }
+      result = await this.executor.execute(plan, { ...executionOptions, dryRun });
+      tracker.complete('execute', {
+        exitCode: result.exitCode,
+        timedOut: result.timedOut,
+        dryRun: dryRun || result?.dryRun || false
+      });
+    } catch (error) {
+      tracker.fail('execute', error);
+      throw new MediaAgentTaskError('Execution phase failed', tracker.getPhases(), {
+        cause: error,
+        context: { plan, debug: debugInfo }
+      });
+    }
+
+    tracker.start('summarize');
+    tracker.complete('summarize', {
+      outputs: Array.isArray(result.resolvedOutputs) ? result.resolvedOutputs.length : 0
+    });
+
+    return {
+      plan,
+      result,
+      phases: tracker.getPhases(),
+      debug: debugInfo
+    };
   }
 
   /**

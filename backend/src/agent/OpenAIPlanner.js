@@ -22,9 +22,10 @@ export class OpenAIPlanner {
 
   /**
    * @param {import('./types.js').AgentRequest} request
-   * @returns {Promise<import('./types.js').CommandPlan>}
+   * @param {{debug?: boolean, includeRawResponse?: boolean}} [options]
+   * @returns {Promise<{plan: import('./types.js').CommandPlan, debug?: Record<string, any>}>}
    */
-  async plan(request) {
+  async plan(request, options = {}) {
     const developerPrompt = this.promptBuilder.build(request);
     const response = await this.client.responses.create({
       model: this.model,
@@ -48,7 +49,7 @@ export class OpenAIPlanner {
           ]
         }
       ],
-      response_format: this.buildResponseFormat()
+      text_format: this.buildResponseFormat()
     });
 
     const responseText = ResponseParser.extractText(response);
@@ -59,7 +60,18 @@ export class OpenAIPlanner {
       throw new Error(`OpenAIレスポンスのJSON解析に失敗しました: ${error.message}`);
     }
 
-    return this.planValidator.validate(parsed, request.outputDir);
+    const plan = this.planValidator.validate(parsed, request.outputDir);
+    const debug = options.debug
+      ? {
+          model: this.model,
+          developerPrompt,
+          responseText,
+          parsed,
+          rawResponse: options.includeRawResponse ? safeSerialize(response) : undefined
+        }
+      : undefined;
+
+    return { plan, debug };
   }
 
   buildResponseFormat() {
@@ -113,5 +125,13 @@ export class OpenAIPlanner {
         }
       }
     };
+  }
+}
+
+function safeSerialize(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
   }
 }

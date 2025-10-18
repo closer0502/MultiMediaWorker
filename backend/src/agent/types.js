@@ -34,6 +34,7 @@
  * @property {string} [cwd]
  * @property {number} [timeoutMs]
  * @property {string} [publicRoot]
+ * @property {boolean} [dryRun]
  */
 
 /**
@@ -53,6 +54,7 @@
  * @property {string} stdout
  * @property {string} stderr
  * @property {DescribedOutput[]} resolvedOutputs
+ * @property {boolean|undefined} dryRun
  */
 
 export {};

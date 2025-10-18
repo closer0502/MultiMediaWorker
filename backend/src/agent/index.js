@@ -7,3 +7,5 @@ export { OpenAIPlanner } from './OpenAIPlanner.js';
 export { ResponseParser } from './ResponseParser.js';
 export { createOpenAIClient } from './OpenAIClientFactory.js';
 export { MediaAgent, createMediaAgent } from './MediaAgent.js';
+export { TaskPhaseTracker, DEFAULT_TASK_PHASES } from './TaskPhaseTracker.js';
+export { MediaAgentTaskError } from './errors.js';

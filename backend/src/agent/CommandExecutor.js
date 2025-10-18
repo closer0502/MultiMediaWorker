@@ -22,16 +22,20 @@ export class CommandExecutor {
   async execute(plan, options = {}) {
     const cwd = options.cwd || process.cwd();
     const publicRoot = options.publicRoot ? path.resolve(options.publicRoot) : null;
+    const dryRun = Boolean(options.dryRun);
 
     await this.ensureOutputDirectories(plan.outputs);
 
-    if (plan.command === 'none') {
+    const skipExecution = dryRun || plan.command === 'none';
+
+    if (skipExecution) {
       return {
         exitCode: null,
         timedOut: false,
         stdout: '',
         stderr: '',
-        resolvedOutputs: await this.describeOutputs(plan.outputs, publicRoot)
+        resolvedOutputs: await this.describeOutputs(plan.outputs, publicRoot),
+        dryRun: dryRun || plan.command === 'none'
       };
     }
 
@@ -42,7 +46,8 @@ export class CommandExecutor {
       timedOut,
       stdout,
       stderr,
-      resolvedOutputs: await this.describeOutputs(plan.outputs, publicRoot)
+      resolvedOutputs: await this.describeOutputs(plan.outputs, publicRoot),
+      dryRun: false
     };
   }
 

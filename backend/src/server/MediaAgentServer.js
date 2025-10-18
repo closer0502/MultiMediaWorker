@@ -4,6 +4,8 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 
+import { MediaAgentTaskError } from '../agent/index.js';
+
 /**
  * Express based API server that wires the media agent to HTTP endpoints.
  */
@@ -131,51 +133,73 @@ export class MediaAgentServer {
    * @param {import('express').Response} res
    */
   async handleTaskRequest(req, res) {
+    const task = (req.body?.task || '').trim();
+    if (!task) {
+      res.status(400).json({ error: 'task フィールドは必須です。' });
+      return;
+    }
+
+    const session = req.agentSession;
+    if (!session) {
+      res.status(500).json({ error: 'セッションが初期化されていません。' });
+      return;
+    }
+
+    const debugMode = parseDebugMode(req.query?.debug);
+    const dryRun = parseBoolean(req.query?.dryRun);
+
+    const files = Array.isArray(req.files)
+      ? req.files.map((file, index) => ({
+          id: `${session.id}-file-${index}`,
+          originalName: file.originalname,
+          absolutePath: path.resolve(file.path),
+          size: file.size,
+          mimeType: file.mimetype
+        }))
+      : [];
+
+    const agentRequest = {
+      task,
+      files,
+      outputDir: session.outputDir
+    };
+
+    const requestPhase = createRequestPhase(task, files, { dryRun, debug: debugMode.enabled });
+
     try {
-      const task = (req.body?.task || '').trim();
-      if (!task) {
-        res.status(400).json({ error: 'task フィールドは必須です。' });
-        return;
-      }
-
-      const session = req.agentSession;
-      if (!session) {
-        res.status(500).json({ error: 'セッションが初期化されませんでした。' });
-        return;
-      }
-
-      const files = Array.isArray(req.files)
-        ? req.files.map((file, index) => ({
-            id: `${session.id}-file-${index}`,
-            originalName: file.originalname,
-            absolutePath: path.resolve(file.path),
-            size: file.size,
-            mimeType: file.mimetype
-          }))
-        : [];
-
-      const agentRequest = {
-        task,
-        files,
-        outputDir: session.outputDir
-      };
-
-      const { plan, result } = await this.agent.runTask(agentRequest, {
+      const agentResponse = await this.agent.runTask(agentRequest, {
         cwd: session.inputDir,
-        publicRoot: this.publicRoot
+        publicRoot: this.publicRoot,
+        dryRun,
+        debug: debugMode.enabled,
+        includeRawResponse: debugMode.includeRaw
       });
 
+      const phases = [requestPhase, ...agentResponse.phases];
+
       res.json({
+        status: 'success',
         sessionId: session.id,
         task,
-        plan,
-        result,
+        plan: agentResponse.plan,
+        result: agentResponse.result,
+        phases,
+        debug: debugMode.enabled ? agentResponse.debug ?? null : undefined,
         uploadedFiles: files
       });
     } catch (error) {
+      const isAgentError = error instanceof MediaAgentTaskError;
+      const phases = [requestPhase, ...(isAgentError ? error.phases : [])];
+
       res.status(500).json({
+        status: 'failed',
+        sessionId: session.id,
         error: 'コマンド生成に失敗しました。',
-        detail: error.message
+        detail: error.message,
+        phases,
+        plan: isAgentError ? error.context?.plan ?? null : null,
+        debug: debugMode.enabled ? error.context?.debug ?? null : undefined,
+        uploadedFiles: files
       });
     }
   }
@@ -223,4 +247,53 @@ function createSafeFileName(name) {
     return `file_${timestamp}`;
   }
   return sanitized.slice(0, 200);
+}
+
+function createRequestPhase(task, files, options = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: 'request',
+    title: 'Receive request',
+    status: 'success',
+    startedAt: now,
+    finishedAt: now,
+    error: null,
+    logs: [],
+    meta: {
+      taskPreview: task.slice(0, 120),
+      fileCount: files.length,
+      dryRun: Boolean(options.dryRun),
+      debug: Boolean(options.debug)
+    }
+  };
+}
+
+function parseBoolean(value) {
+  const normalized = getFirstQueryValue(value);
+  if (normalized === undefined) {
+    return false;
+  }
+  return ['1', 'true', 'yes', 'on'].includes(normalized.toLowerCase());
+}
+
+function parseDebugMode(value) {
+  const normalized = getFirstQueryValue(value);
+  if (!normalized) {
+    return { enabled: false, includeRaw: false };
+  }
+  const lower = normalized.toLowerCase();
+  return {
+    enabled: ['1', 'true', 'yes', 'on', 'verbose', 'full'].includes(lower),
+    includeRaw: lower === 'verbose' || lower === 'full'
+  };
+}
+
+function getFirstQueryValue(value) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  return String(value);
 }
