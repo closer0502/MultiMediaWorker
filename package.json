@@ -3,13 +3,14 @@
   "version": "1.0.0",
   "description": "OpenAI APIを使用したマルチメディアコマンド生成ツール",
   "type": "module",
-  "main": "OpenaiAgent.js",
+  "main": "backend/src/server.js",
   "scripts": {
-    "dev": "vite",
-    "dev:server": "node server/index.js",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "node OpenaiAgent.test.js"
+    "dev": "npm run dev:client",
+    "dev:server": "node backend/src/server.js",
+    "dev:client": "vite --config frontend/vite.config.js",
+    "build:client": "vite build --config frontend/vite.config.js",
+    "preview:client": "vite preview --config frontend/vite.config.js",
+    "test": "node backend/tests/agent.test.js"
   },
   "keywords": [
     "openai",

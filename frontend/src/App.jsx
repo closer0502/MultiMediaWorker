@@ -12,7 +12,8 @@ const INITIAL_HISTORY = [];
  */
 
 /**
- * @returns {JSX.Element} Application component.
+ * Main application component.
+ * @returns {JSX.Element}
  */
 export default function App() {
   const [task, setTask] = useState('');
@@ -27,7 +28,7 @@ export default function App() {
     fetch('/api/tools')
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error('ツール情報の取得に失敗しました。');
+          throw new Error('Failed to fetch tool information.');
         }
         const payload = await response.json();
         if (!cancelled) {
@@ -50,13 +51,13 @@ export default function App() {
   }, []);
 
   /**
-   * @param {React.FormEvent<HTMLFormElement>} event - Form submission event.
+   * @param {React.FormEvent<HTMLFormElement>} event
    */
   const handleSubmit = useCallback(
     async (event) => {
       event.preventDefault();
       if (!task.trim()) {
-        setError('課題を入力してください。');
+        setError('Please describe the task.');
         return;
       }
       setIsSubmitting(true);
@@ -75,7 +76,7 @@ export default function App() {
 
         if (!response.ok) {
           const detail = await response.json().catch(() => ({}));
-          const message = detail?.error || 'コマンド生成に失敗しました。';
+          const message = detail?.error || 'Failed to generate command.';
           throw new Error(message);
         }
 
@@ -107,23 +108,23 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1>MultiMedia Worker</h1>
-        <p>自然言語から ffmpeg / ImageMagick / ExifTool のコマンドを自動生成します。</p>
+        <p>Ask in natural language and get ready-to-run ffmpeg / ImageMagick / ExifTool commands.</p>
       </header>
 
       <main className="content">
         <section className="panel">
-          <h2>利用可能なツール</h2>
+          <h2>Available Tools</h2>
           <ToolList tools={tools} />
         </section>
 
         <section className="panel">
-          <h2>課題を送信</h2>
+          <h2>Submit a Task</h2>
           <form className="task-form" onSubmit={handleSubmit}>
             <label className="field">
-              <span>手順や目的</span>
+              <span>Goal / Instructions</span>
               <textarea
                 value={task}
-                placeholder='例: "135329973_p1.png を 512x512 の PNG にリサイズしてください"'
+                placeholder='Example: "Resize 135329973_p1.png to 512x512 PNG."'
                 onChange={(event) => setTask(event.target.value)}
                 rows={5}
                 disabled={isSubmitting}
@@ -131,7 +132,7 @@ export default function App() {
             </label>
 
             <label className="field">
-              <span>ファイルを添付</span>
+              <span>Attach Files</span>
               <input
                 type="file"
                 multiple
@@ -146,10 +147,10 @@ export default function App() {
 
             <div className="form-actions">
               <button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? '処理中...' : 'コマンドを生成'}
+                {isSubmitting ? 'Working…' : 'Generate Command'}
               </button>
               <button type="button" onClick={resetForm} disabled={isSubmitting}>
-                リセット
+                Reset
               </button>
             </div>
           </form>
@@ -158,14 +159,14 @@ export default function App() {
 
         {latestEntry && (
           <section className="panel">
-            <h2>最新の結果</h2>
+            <h2>Latest Result</h2>
             <ResultView entry={latestEntry} />
           </section>
         )}
 
         {history.length > 1 && (
           <section className="panel">
-            <h2>履歴</h2>
+            <h2>History</h2>
             <HistoryList entries={history.slice(1)} />
           </section>
         )}
@@ -175,12 +176,12 @@ export default function App() {
 }
 
 /**
- * @param {{tools: Array<{id: string, title: string, description: string}>}} props - Component props.
+ * @param {{tools: Array<{id: string, title: string, description: string}>}} props
  * @returns {JSX.Element}
  */
 function ToolList({ tools }) {
   if (!tools.length) {
-    return <p>ツール情報を読み込み中...</p>;
+    return <p>Loading tool catalogue…</p>;
   }
   return (
     <ul className="tool-list">
@@ -195,7 +196,7 @@ function ToolList({ tools }) {
 }
 
 /**
- * @param {{ entry: any }} props - Component props.
+ * @param {{ entry: any }} props
  * @returns {JSX.Element}
  */
 function ResultView({ entry }) {
@@ -204,25 +205,25 @@ function ResultView({ entry }) {
   return (
     <div className="result-view">
       <div className="result-section">
-        <h3>コマンド</h3>
+        <h3>Command</h3>
         <code className="command-line">{buildCommandString(entry.plan)}</code>
         <p className="note">{entry.plan.reasoning}</p>
       </div>
 
       {entry.plan.followUp && (
         <div className="result-section">
-          <h3>追記事項</h3>
+          <h3>Follow-up Notes</h3>
           <p>{entry.plan.followUp}</p>
         </div>
       )}
 
       <div className="result-section">
-        <h3>出力ファイル</h3>
+        <h3>Outputs</h3>
         <OutputList outputs={outputList} />
       </div>
 
       <div className="result-section">
-        <h3>プロセスの状態</h3>
+        <h3>Process Details</h3>
         <ProcessSummary result={entry.result} />
       </div>
     </div>
@@ -230,27 +231,27 @@ function ResultView({ entry }) {
 }
 
 /**
- * @param {{ outputs: Array<any> }} props - Output list props.
+ * @param {{ outputs: Array<any> }} props
  * @returns {JSX.Element}
  */
 function OutputList({ outputs }) {
   if (!outputs.length) {
-    return <p>出力は宣言されていません。</p>;
+    return <p>No outputs were declared.</p>;
   }
   return (
     <ul className="output-list">
       {outputs.map((item) => (
         <li key={item.path}>
           <div className="output-path">
-            <strong>{item.description || 'ファイル'}</strong>
+            <strong>{item.description || 'File'}</strong>
             <span>{item.absolutePath || item.path}</span>
           </div>
           <div className="output-meta">
-            <span>{item.exists ? '生成済み' : '未生成'}</span>
+            <span>{item.exists ? 'Ready' : 'Pending'}</span>
             {item.size != null && <span>{formatFileSize(item.size)}</span>}
             {item.publicPath && (
               <a href={`/files/${item.publicPath}`} target="_blank" rel="noreferrer">
-                表示 / ダウンロード
+                Open
               </a>
             )}
           </div>
@@ -261,43 +262,43 @@ function OutputList({ outputs }) {
 }
 
 /**
- * @param {{ result: any }} props - Process summary props.
+ * @param {{ result: any }} props
  * @returns {JSX.Element}
  */
 function ProcessSummary({ result }) {
   if (!result) {
-    return <p>まだ実行されていません。</p>;
+    return <p>Command has not been executed yet.</p>;
   }
 
   return (
     <div className="process-summary">
       <div className="process-row">
-        <span>終了コード</span>
-        <span>{result.exitCode === null ? '未実行' : result.exitCode}</span>
+        <span>Exit Code</span>
+        <span>{result.exitCode === null ? 'not run' : result.exitCode}</span>
       </div>
       <div className="process-row">
-        <span>タイムアウト</span>
-        <span>{result.timedOut ? 'はい' : 'いいえ'}</span>
+        <span>Timed Out</span>
+        <span>{result.timedOut ? 'yes' : 'no'}</span>
       </div>
       <details className="log-block">
-        <summary>標準出力</summary>
-        <pre>{result.stdout || '(なし)'}</pre>
+        <summary>Standard Output</summary>
+        <pre>{result.stdout || '(empty)'}</pre>
       </details>
       <details className="log-block">
-        <summary>標準エラー</summary>
-        <pre className={result.stderr ? 'log-error' : ''}>{result.stderr || '(なし)'}</pre>
+        <summary>Standard Error</summary>
+        <pre className={result.stderr ? 'log-error' : ''}>{result.stderr || '(empty)'}</pre>
       </details>
     </div>
   );
 }
 
 /**
- * @param {{ entries: any[] }} props - History props.
+ * @param {{ entries: any[] }} props
  * @returns {JSX.Element}
  */
 function HistoryList({ entries }) {
   if (!entries.length) {
-    return <p>履歴はありません。</p>;
+    return <p>No previous runs.</p>;
   }
   return (
     <ul className="history-list">
@@ -313,8 +314,8 @@ function HistoryList({ entries }) {
 }
 
 /**
- * @param {ClientCommandPlan} plan - Command plan.
- * @returns {string} Rendered command line.
+ * @param {ClientCommandPlan} plan
+ * @returns {string}
  */
 function buildCommandString(plan) {
   if (!plan?.command) {
@@ -325,9 +326,9 @@ function buildCommandString(plan) {
 }
 
 /**
- * @param {File[]} files - Selected files.
- * @param {() => void} onClear - Clear handler.
- * @param {boolean} disabled - Disabled flag.
+ * @param {File[]} files
+ * @param {() => void} onClear
+ * @param {boolean} disabled
  * @returns {JSX.Element}
  */
 function FilePreviewList({ files, onClear, disabled }) {
@@ -343,10 +344,10 @@ function FilePreviewList({ files, onClear, disabled }) {
   return (
     <div className="file-preview">
       <div className="file-preview-header">
-        <strong>選択中のファイル ({files.length} 件)</strong>
+        <strong>Selected files ({files.length})</strong>
         <span>{formatFileSize(totalSize)}</span>
         <button type="button" onClick={onClear} disabled={disabled}>
-          クリア
+          Clear
         </button>
       </div>
       <ul>
@@ -362,8 +363,8 @@ function FilePreviewList({ files, onClear, disabled }) {
 }
 
 /**
- * @param {number} bytes - File size.
- * @returns {string} Human readable size.
+ * @param {number} bytes
+ * @returns {string}
  */
 function formatFileSize(bytes) {
   if (!bytes && bytes !== 0) {
@@ -380,8 +381,8 @@ function formatFileSize(bytes) {
 }
 
 /**
- * @param {string} argument - Command argument.
- * @returns {string} Quoted argument when needed.
+ * @param {string} argument
+ * @returns {string}
  */
 function quoteArgument(argument) {
   if (!argument) {

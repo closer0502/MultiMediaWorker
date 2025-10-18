@@ -1,107 +1,107 @@
 # MultiMediaWorker
 
-自然言語のリクエストを具体的なCLI操作に変換する、AI支援メディアコマンドランナーです。エージェントが`ffmpeg`、`magick`（ImageMagick）、`exiftool`から選択し、サーバー上でコマンドを実行し、生成されたアーティファクトをWeb UIを通じて公開します。
+MultiMediaWorker は、自然言語のリクエストを ffmpeg / ImageMagick / ExifTool などのコマンドに変換して実行する AI エージェント + Web UI アプリケーションです。エージェントはバックエンドでコマンドを計画・実行し、生成物をフロントエンドから確認・ダウンロードできます。
 
-## 機能
+## ディレクトリ構成
 
-- オプションのファイル添付が可能な自然言語タスク送信
-- 検証済みのコマンドプランと期待される出力を返す、OpenAI駆動のプランナー
-- タイムアウト処理と出力検査を備えたコマンド実行サンドボックス
-- コマンド結果の監視と生成ファイルのダウンロードのための、Vite + Reactフロントエンド
-- 拡張可能なツールカタログ（将来的にUIを変更せずにサーバー側でツールを追加可能）
+```
+backend/
+  src/
+    agent/               # プランナー・実行器などのクラス群
+    server/              # HTTP サーバーの実装
+    server.js            # バックエンドのエントリーポイント
+  tests/agent.test.js    # バックエンド向けユニットテスト
 
-## 前提条件
+frontend/
+  src/                   # React + Vite フロントエンド
+  index.html
+  vite.config.js
 
-- Node.js 18以降
-- 使用予定のCLIツール（例：`ffmpeg`、`magick`、`exiftool`）がインストールされ、`PATH`で利用可能であること
-- `.env.local`にOpenAI APIキーを設定（`.env.example`を参照）
+public/generated/        # 生成物（静的配信用、Git 追跡対象外）
+storage/                 # アップロードファイルの一時保存先（Git 追跡対象外）
+```
 
-## セットアップ
+## 事前準備
+
+- Node.js 18 以上
+- `ffmpeg`, `magick`, `exiftool` など必要な CLI がローカル環境の `PATH` 上にあること
+- OpenAI API キーを `.env.local` に設定（`.env.example` をコピーして利用）
+
+```bash
+cp .env.example .env.local
+```
+
+## インストール
 
 ```bash
 npm install
 ```
 
-`.env.local`を作成（`.env.example`をコピー）し、`OPENAI_API_KEY`を設定します。オプションの上書き設定：
+## 開発用サーバーの起動
 
-```
-OPENAI_MODEL=gpt-4o-mini
-PORT=3001
-```
-
-## 開発ワークフロー
-
-エージェントバックエンドを実行：
+バックエンドとフロントエンドを別ターミナルで起動します。
 
 ```bash
+# ターミナル1: バックエンド API
 npm run dev:server
+
+# ターミナル2: フロントエンド (Vite)
+npm run dev:client
 ```
 
-次に、別のターミナルでVite開発サーバーを起動：
-
-```bash
-npm run dev
-```
-
-Web UIは http://localhost:5173 で利用可能です（ポート3001のバックエンドにプロキシされます）。
+フロントエンドは http://localhost:5173 からアクセスできます（バックエンドは http://localhost:3001）。
 
 ## テストとビルド
 
 ```bash
-# エージェントユーティリティのユニットテスト
+# バックエンドのユニットテスト
 npm test
 
-# Webクライアントのプロダクションビルド
-npm run build
+# フロントエンドの本番ビルド出力
+npm run build:client
+
+# フロントエンドビルドのローカル確認
+npm run preview:client
 ```
 
-## プロジェクト構造
+## HTTP API エンドポイント
 
-```
-OpenaiAgent.js       # コアエージェントロジック、OpenAI統合、コマンドランナー
-server/index.js      # タスク用のRESTエンドポイントを公開するExpressサーバー
-src/                 # Reactフロントエンド（Vite）
-public/generated/    # UIに提供されるコマンド出力（.gitignore対象）
-storage/             # セッション入力（.gitignore対象）
-```
+- `GET /api/tools`
+  - 利用可能なツール一覧を返します。
+- `POST /api/tasks`
+  - `multipart/form-data`。フィールド:
+    - `task`: 必須、自然言語で行いたい処理を記載。
+    - `files`: 任意、処理対象ファイル（複数可）。
+  - レスポンス例:
 
-## HTTP API
-
-- `GET /api/tools` – 表示に使用するツールカタログを返します
-- `POST /api/tasks` – 以下を含む`multipart/form-data`を受け付けます：
-  - `task`：自然言語による指示
-  - `files`：1つ以上のファイルアップロード（オプション）
-
-レスポンス例：
-
-```json
-{
-  "sessionId": "session-...",
-  "plan": {
-    "command": "ffmpeg",
-    "arguments": ["-i", "..."],
-    "reasoning": "...",
-    "outputs": [
-      {
-        "description": "Resized image",
-        "absolutePath": "C:\\\\...\\\\public\\\\generated\\\\...\\\\output.png",
-        "publicPath": "generated/.../output.png",
-        "exists": true,
-        "size": 123456
+    ```json
+    {
+      "sessionId": "session-...",
+      "plan": {
+        "command": "ffmpeg",
+        "arguments": ["-i", "..."],
+        "reasoning": "...",
+        "outputs": [
+          {
+            "description": "Resized image",
+            "absolutePath": "C:\\\\...\\\\public\\\\generated\\\\...\\\\output.png",
+            "publicPath": "generated/.../output.png",
+            "exists": true,
+            "size": 123456
+          }
+        ]
+      },
+      "result": {
+        "exitCode": 0,
+        "stdout": "...",
+        "stderr": "...",
+        "timedOut": false
       }
-    ]
-  },
-  "result": {
-    "exitCode": 0,
-    "stdout": "...",
-    "stderr": "...",
-    "timedOut": false
-  }
-}
-```
+    }
+    ```
 
-## 新しいツールの追加
+## ツールの追加方法
 
-1. `OpenaiAgent.js`の`TOOL_DEFINITIONS`を新しいコマンド名と説明で更新します
-2. コマンドが追加の制約を必要とする場合、検証スキーマ（enum）を拡張します
-3. CLIがホストにインストールされ、`PATH`で利用可能であることを確認します
+1. `backend/src/agent/constants.js` にある `DEFAULT_TOOL_DEFINITIONS` に新しいツールの説明を追加します。
+2. 追加したコマンドが扱えるように、CLI をホスト環境へインストールして `PATH` に通します。
+3. 必要に応じてフロントエンドでの表示文言を調整します（通常はバックエンドの定義を参照するため追加対応不要）。

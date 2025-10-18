@@ -16,6 +16,7 @@ pnpm-debug.log*
 dist/
 build/
 out/
+frontend/dist/
 *.tsbuildinfo
 
 # IDE and editor files

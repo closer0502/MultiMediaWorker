@@ -2,26 +2,33 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const TMP_ROOT = path.join(process.cwd(), 'tmp-tests');
+import {
+  CommandExecutor,
+  PlanValidator,
+  ResponseParser,
+  ToolRegistry,
+  createMediaAgent
+} from '../src/agent/index.js';
 
-import { extractResponseText, executeCommandPlan, runAgentTask, validateCommandPlan } from './OpenaiAgent.js';
+const TMP_ROOT = path.join(process.cwd(), 'tmp-tests');
+const toolRegistry = ToolRegistry.createDefault();
 
 async function runTests() {
-  await testExtractResponseText();
-  await testValidateCommandPlan();
-  await testExecuteCommandPlanWithNone();
-  await testRunAgentTaskWithMockClient();
+  await testResponseParser();
+  await testPlanValidator();
+  await testCommandExecutorWithNone();
+  await testMediaAgentWithMockClient();
   await cleanup();
   // eslint-disable-next-line no-console
   console.log('All tests passed');
 }
 
-async function testExtractResponseText() {
+async function testResponseParser() {
   const viaOutputText = {
     output_text: '{"command":"none","arguments":[],"reasoning":"","outputs":[]}'
   };
   assert.equal(
-    extractResponseText(viaOutputText),
+    ResponseParser.extractText(viaOutputText),
     '{"command":"none","arguments":[],"reasoning":"","outputs":[]}'
   );
 
@@ -37,10 +44,11 @@ async function testExtractResponseText() {
       }
     ]
   };
-  assert.equal(extractResponseText(viaOutputArray), '{"hello":"world"}');
+  assert.equal(ResponseParser.extractText(viaOutputArray), '{"hello":"world"}');
 }
 
-async function testValidateCommandPlan() {
+async function testPlanValidator() {
+  const validator = new PlanValidator(toolRegistry);
   const tmpDir = path.join(TMP_ROOT, 'outputs');
   const plan = {
     command: 'none',
@@ -55,13 +63,13 @@ async function testValidateCommandPlan() {
     ]
   };
 
-  const validated = validateCommandPlan(plan, tmpDir);
+  const validated = validator.validate(plan, tmpDir);
   assert.equal(validated.outputs.length, 1);
   assert.equal(path.resolve(validated.outputs[0].path), path.join(tmpDir, 'sample.txt'));
 
   let threw = false;
   try {
-    validateCommandPlan(
+    validator.validate(
       {
         command: 'none',
         arguments: [],
@@ -83,10 +91,12 @@ async function testValidateCommandPlan() {
   assert.equal(threw, true);
 }
 
-async function testExecuteCommandPlanWithNone() {
+async function testCommandExecutorWithNone() {
+  const validator = new PlanValidator(toolRegistry);
+  const executor = new CommandExecutor();
   const tmpDir = path.join(TMP_ROOT, 'outputs-none');
   await fs.mkdir(tmpDir, { recursive: true });
-  const plan = validateCommandPlan(
+  const plan = validator.validate(
     {
       command: 'none',
       arguments: [],
@@ -102,7 +112,7 @@ async function testExecuteCommandPlanWithNone() {
     tmpDir
   );
 
-  const result = await executeCommandPlan(plan, { publicRoot: tmpDir });
+  const result = await executor.execute(plan, { publicRoot: tmpDir });
   assert.equal(result.exitCode, null);
   assert.equal(result.timedOut, false);
   assert.equal(result.stdout, '');
@@ -111,7 +121,7 @@ async function testExecuteCommandPlanWithNone() {
   assert.equal(result.resolvedOutputs[0].exists, false);
 }
 
-async function testRunAgentTaskWithMockClient() {
+async function testMediaAgentWithMockClient() {
   const mockClient = {
     responses: {
       create: async () => ({
@@ -126,11 +136,11 @@ async function testRunAgentTaskWithMockClient() {
     }
   };
 
-  const tmpDir = path.join(process.cwd(), 'tmp-tests', 'agent-run');
+  const tmpDir = path.join(TMP_ROOT, 'agent-run');
   await fs.mkdir(tmpDir, { recursive: true });
 
-  const { plan, result } = await runAgentTask(
-    mockClient,
+  const agent = createMediaAgent(mockClient, { toolRegistry });
+  const { plan, result } = await agent.runTask(
     {
       task: '何もしないでください',
       files: [],
