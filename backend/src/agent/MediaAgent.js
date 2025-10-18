@@ -20,7 +20,7 @@ export class MediaAgent {
   /**
    * @param {import('./types.js').AgentRequest} request
    * @param {import('./types.js').CommandExecutionOptions & {dryRun?: boolean, debug?: boolean, includeRawResponse?: boolean}} [options]
-   * @returns {Promise<{plan: import('./types.js').CommandPlan, result: import('./types.js').CommandExecutionResult, phases: Array<any>, debug?: Record<string, any>}>}
+   * @returns {Promise<{plan: import('./types.js').CommandPlan, rawPlan: any, result: import('./types.js').CommandExecutionResult, phases: Array<any>, debug?: Record<string, any>}>}
    */
   async runTask(request, options = {}) {
     const { dryRun = false, debug = false, includeRawResponse = false, ...executionOptions } = options;
@@ -28,15 +28,24 @@ export class MediaAgent {
 
     tracker.start('plan', { task: request.task.slice(0, 120) });
     let plan;
+    let rawPlan;
     let debugInfo;
     try {
       const planResult = await this.planner.plan(request, { debug, includeRawResponse });
       plan = planResult.plan;
+      rawPlan = planResult.rawPlan;
       debugInfo = planResult.debug;
       tracker.complete('plan', { command: plan.command });
     } catch (error) {
       tracker.fail('plan', error);
-      throw new MediaAgentTaskError('Plan phase failed', tracker.getPhases(), { cause: error });
+      throw new MediaAgentTaskError('Plan phase failed', tracker.getPhases(), {
+        cause: error,
+        context: {
+          rawPlan: error?.rawPlan ?? null,
+          debug: error?.debug ?? null,
+          responseText: error?.responseText ?? null
+        }
+      });
     }
 
     tracker.start('execute', { dryRun });
@@ -55,7 +64,7 @@ export class MediaAgent {
       tracker.fail('execute', error);
       throw new MediaAgentTaskError('Execution phase failed', tracker.getPhases(), {
         cause: error,
-        context: { plan, debug: debugInfo }
+        context: { plan, rawPlan: rawPlan ?? plan, debug: debugInfo }
       });
     }
 
@@ -66,6 +75,7 @@ export class MediaAgent {
 
     return {
       plan,
+      rawPlan: rawPlan ?? plan,
       result,
       phases: tracker.getPhases(),
       debug: debugInfo

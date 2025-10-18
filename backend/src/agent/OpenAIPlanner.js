@@ -1,3 +1,5 @@
+// @ts-check
+
 import { DEFAULT_MODEL } from './constants.js';
 import { PromptBuilder } from './PromptBuilder.js';
 import { PlanValidator } from './PlanValidator.js';
@@ -23,11 +25,12 @@ export class OpenAIPlanner {
   /**
    * @param {import('./types.js').AgentRequest} request
    * @param {{debug?: boolean, includeRawResponse?: boolean}} [options]
-   * @returns {Promise<{plan: import('./types.js').CommandPlan, debug?: Record<string, any>}>}
+   * @returns {Promise<{plan: import('./types.js').CommandPlan, rawPlan: any, debug?: Record<string, any>}>}
    */
   async plan(request, options = {}) {
     const developerPrompt = this.promptBuilder.build(request);
-    const response = await this.client.responses.create({
+    /** @type {import('openai/resources/responses/responses').ResponseCreateParamsNonStreaming} */
+    const responsePayload = {
       model: this.model,
       input: [
         {
@@ -49,8 +52,19 @@ export class OpenAIPlanner {
           ]
         }
       ],
-      text_format: this.buildResponseFormat()
-    });
+      text: {
+        format: this.buildResponseFormat(),
+        verbosity: 'medium'
+      },
+      reasoning: {
+        effort: 'low'
+      },
+      tools: [],
+      store: true,
+      include: ['reasoning.encrypted_content', 'web_search_call.action.sources']
+    };
+
+    const response = await this.client.responses.create(responsePayload);
 
     const responseText = ResponseParser.extractText(response);
     let parsed;
@@ -60,7 +74,6 @@ export class OpenAIPlanner {
       throw new Error(`OpenAIレスポンスのJSON解析に失敗しました: ${error.message}`);
     }
 
-    const plan = this.planValidator.validate(parsed, request.outputDir);
     const debug = options.debug
       ? {
           model: this.model,
@@ -71,53 +84,67 @@ export class OpenAIPlanner {
         }
       : undefined;
 
-    return { plan, debug };
+    try {
+      const plan = this.planValidator.validate(parsed, request.outputDir);
+      return { plan, rawPlan: parsed, debug };
+    } catch (error) {
+      if (error && typeof error === 'object') {
+        error.rawPlan = parsed;
+        if (debug) {
+          error.debug = debug;
+        }
+        error.responseText = responseText;
+      }
+      throw error;
+    }
   }
 
+  /**
+   * @returns {import('openai/resources/responses/responses').ResponseFormatTextJSONSchemaConfig}
+   */
   buildResponseFormat() {
     return {
       type: 'json_schema',
-      json_schema: {
-        name: 'command_plan',
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['command', 'arguments', 'reasoning', 'outputs'],
-          properties: {
-            command: {
-              type: 'string',
-              enum: this.toolRegistry.listCommandIds(),
-              description: 'Command name to execute.'
-            },
-            arguments: {
-              type: 'array',
-              description: 'Ordered command arguments.',
-              items: {
-                type: 'string'
-              }
-            },
-            reasoning: {
-              type: 'string',
-              description: 'Why this command solves the request.'
-            },
-            followUp: {
-              type: 'string',
-              description: 'Optional follow-up guidance for the operator.'
-            },
-            outputs: {
-              type: 'array',
-              description: 'Planned output files.',
-              items: {
-                type: 'object',
-                required: ['path', 'description'],
-                additionalProperties: false,
-                properties: {
-                  path: {
-                    type: 'string'
-                  },
-                  description: {
-                    type: 'string'
-                  }
+      name: 'command_plan',
+      strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['command', 'arguments', 'reasoning', 'followUp', 'outputs'],
+        properties: {
+          command: {
+            type: 'string',
+            description: 'Command name to execute.',
+            enum: this.toolRegistry.listCommandIds()
+          },
+          arguments: {
+            type: 'array',
+            description: 'Ordered command arguments.',
+            items: {
+              type: 'string'
+            }
+          },
+          reasoning: {
+            type: 'string',
+            description: 'Why this command solves the request.'
+          },
+          followUp: {
+            type: 'string',
+            description: 'Optional follow-up guidance for the operator.'
+          },
+          outputs: {
+            type: 'array',
+            description: 'Planned output files.',
+            items: {
+              type: 'object',
+              required: ['path', 'description'],
+              additionalProperties: false,
+              properties: {
+                path: {
+                  type: 'string'
+                },
+                description: {
+                  type: 'string'
                 }
               }
             }

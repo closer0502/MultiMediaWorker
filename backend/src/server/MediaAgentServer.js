@@ -182,6 +182,7 @@ export class MediaAgentServer {
         sessionId: session.id,
         task,
         plan: agentResponse.plan,
+        rawPlan: agentResponse.rawPlan ?? agentResponse.plan,
         result: agentResponse.result,
         phases,
         debug: debugMode.enabled ? agentResponse.debug ?? null : undefined,
@@ -190,6 +191,9 @@ export class MediaAgentServer {
     } catch (error) {
       const isAgentError = error instanceof MediaAgentTaskError;
       const phases = [requestPhase, ...(isAgentError ? error.phases : [])];
+      const errorContext = isAgentError ? error.context || {} : {};
+      const planPayload = isAgentError ? errorContext.plan ?? null : null;
+      const rawPlan = isAgentError ? errorContext.rawPlan ?? planPayload : null;
 
       res.status(500).json({
         status: 'failed',
@@ -197,8 +201,10 @@ export class MediaAgentServer {
         error: 'コマンド生成に失敗しました。',
         detail: error.message,
         phases,
-        plan: isAgentError ? error.context?.plan ?? null : null,
-        debug: debugMode.enabled ? error.context?.debug ?? null : undefined,
+        plan: planPayload,
+        rawPlan,
+        responseText: isAgentError ? errorContext.responseText ?? null : null,
+        debug: debugMode.enabled ? errorContext.debug ?? null : undefined,
         uploadedFiles: files
       });
     }

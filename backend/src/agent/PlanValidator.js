@@ -38,7 +38,7 @@ export class PlanValidator {
     }
 
     if (!Array.isArray(plan.outputs)) {
-      throw new Error('outputs は配列である必要があります。');
+      plan.outputs = [];
     }
 
     const normalizedOutputDir = path.resolve(outputDir);

@@ -112,12 +112,14 @@ export default function App() {
                 submittedAt,
                 task,
                 plan: payload.plan || null,
+                rawPlan: payload.rawPlan ?? payload.plan ?? null,
                 result: payload.result || null,
                 phases: payload.phases || [],
                 uploadedFiles: payload.uploadedFiles || pendingUploads,
                 status: payload.status || 'failed',
                 error: payload.detail || message,
                 debug: payload.debug || null,
+                responseText: payload.responseText ?? null,
                 requestOptions: {
                   debug: debugEnabled,
                   verbose: debugVerbose,
@@ -140,12 +142,14 @@ export default function App() {
             submittedAt,
             task: payload.task,
             plan: payload.plan,
+            rawPlan: payload.rawPlan ?? payload.plan ?? null,
             result: payload.result,
             phases: payload.phases || [],
             uploadedFiles: payload.uploadedFiles || pendingUploads,
             status: payload.status || 'success',
             error: payload.detail || null,
             debug: payload.debug || null,
+            responseText: payload.responseText ?? null,
             requestOptions: {
               debug: debugEnabled,
               verbose: debugVerbose,
@@ -302,6 +306,9 @@ function ToolList({ tools }) {
 function ResultView({ entry }) {
   const outputList = entry?.result?.resolvedOutputs || [];
   const statusLabel = STATUS_LABELS[entry.status] || entry.status || 'Unknown';
+  const displayPlan = entry.plan ?? entry.rawPlan;
+  const reasoning = entry.plan?.reasoning ?? entry.rawPlan?.reasoning ?? '';
+  const followUp = entry.plan?.followUp ?? entry.rawPlan?.followUp ?? '';
 
   return (
     <div className="result-view">
@@ -320,20 +327,40 @@ function ResultView({ entry }) {
 
       <div className="result-section">
         <h3>Command</h3>
-        {entry.plan ? (
+        {displayPlan ? (
           <>
-            <code className="command-line">{buildCommandString(entry.plan)}</code>
-            <p className="note">{entry.plan.reasoning}</p>
+            <code className="command-line">{buildCommandString(displayPlan)}</code>
+            {reasoning && <p className="note">{reasoning}</p>}
           </>
         ) : (
           <p>Command plan is not available.</p>
         )}
       </div>
 
-      {entry.plan?.followUp && (
+      {followUp && (
         <div className="result-section">
           <h3>Follow-up Notes</h3>
-          <p>{entry.plan.followUp}</p>
+          <p>{followUp}</p>
+        </div>
+      )}
+
+      {entry.rawPlan && (
+        <div className="result-section">
+          <h3>Planner Raw Output</h3>
+          <details className="debug-block">
+            <summary>View JSON</summary>
+            <pre>{JSON.stringify(entry.rawPlan, null, 2)}</pre>
+          </details>
+        </div>
+      )}
+
+      {entry.responseText && (
+        <div className="result-section">
+          <h3>Raw Response Text</h3>
+          <details className="debug-block">
+            <summary>View Response</summary>
+            <pre>{entry.responseText}</pre>
+          </details>
         </div>
       )}
 
@@ -562,7 +589,9 @@ function HistoryList({ entries }) {
             <span>{new Date(item.submittedAt).toLocaleString()}</span>
           </div>
           <p className="history-task">{item.task}</p>
-          <code className="command-line small">{buildCommandString(item.plan)}</code>
+          <code className="command-line small">
+            {buildCommandString(item.plan ?? item.rawPlan) || '(no command)'}
+          </code>
         </li>
       ))}
     </ul>
@@ -570,7 +599,7 @@ function HistoryList({ entries }) {
 }
 
 /**
- * @param {ClientCommandPlan} plan
+ * @param {{command?: string, arguments?: string[]}} plan
  * @returns {string}
  */
 function buildCommandString(plan) {

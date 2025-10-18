@@ -69,6 +69,18 @@ async function testPlanValidator() {
   assert.equal(validated.outputs.length, 1);
   assert.equal(path.resolve(validated.outputs[0].path), path.join(tmpDir, 'sample.txt'));
 
+  const withoutOutputs = validator.validate(
+    {
+      command: 'none',
+      arguments: [],
+      reasoning: '',
+      followUp: ''
+    },
+    tmpDir
+  );
+  assert.ok(Array.isArray(withoutOutputs.outputs));
+  assert.equal(withoutOutputs.outputs.length, 0);
+
   let threw = false;
   try {
     validator.validate(
@@ -162,7 +174,7 @@ async function testMediaAgentWithMockClient() {
   await fs.mkdir(tmpDir, { recursive: true });
 
   const agent = createMediaAgent(mockClient, { toolRegistry });
-  const { plan, result, phases, debug } = await agent.runTask(
+  const { plan, rawPlan, result, phases, debug } = await agent.runTask(
     {
       task: '何もしないでください',
       files: [],
@@ -178,6 +190,7 @@ async function testMediaAgentWithMockClient() {
   assert.equal(phases[0].id, 'plan');
   assert.equal(phases[1].id, 'execute');
   assert.ok(debug);
+  assert.ok(rawPlan);
 }
 
 async function cleanup() {
