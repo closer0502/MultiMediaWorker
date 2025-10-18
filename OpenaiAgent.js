@@ -1,9 +1,17 @@
+/**
+ * @typedef {Object} CommandResponse
+ * @property {string} command - コマンド名 (ffmpeg, magick, exiftool, none)
+ * @property {string[]} arguments - コマンドの引数配列
+ */
+
 import OpenAI from "openai";
 
+/** @type {OpenAI} OpenAIクライアント */
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+/** @type {any} OpenAI APIレスポンス */
 const response = await openai.responses.create({
   model: "gpt-5",
   input: [
