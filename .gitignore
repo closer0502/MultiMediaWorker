@@ -84,3 +84,5 @@ tmp_*
 
 # FFmpeg temporary files
 ffmpeg2pass-*
+
+AGENTS.md
