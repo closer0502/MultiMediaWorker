@@ -1,0 +1,22 @@
+{
+  "name": "multimedia-worker",
+  "version": "1.0.0",
+  "description": "OpenAI APIを使用したマルチメディアコマンド生成ツール",
+  "type": "module",
+  "main": "OpenaiAgent.js",
+  "scripts": {
+    "test": "node OpenaiAgent.test.js"
+  },
+  "keywords": [
+    "openai",
+    "ffmpeg",
+    "imagemagick",
+    "exiftool"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "openai": "^4.0.0"
+  }
+}
