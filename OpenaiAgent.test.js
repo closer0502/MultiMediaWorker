@@ -1,84 +1,155 @@
-/**
- * @typedef {Object} MockResponse
- * @property {any} data - レスポンスデータ
- */
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
-import { createOpenAIClient, getCommandSuggestion } from './OpenaiAgent.js';
+const TMP_ROOT = path.join(process.cwd(), 'tmp-tests');
 
-/**
- * @param {any} mockResponseData - モックレスポンスデータ
- * @returns {any} モッククライアント
- */
-function createMockClient(mockResponseData) {
-  return {
-    responses: {
-      create: async () => mockResponseData
-    }
-  };
+import { extractResponseText, executeCommandPlan, runAgentTask, validateCommandPlan } from './OpenaiAgent.js';
+
+async function runTests() {
+  await testExtractResponseText();
+  await testValidateCommandPlan();
+  await testExecuteCommandPlanWithNone();
+  await testRunAgentTaskWithMockClient();
+  await cleanup();
+  // eslint-disable-next-line no-console
+  console.log('All tests passed');
 }
 
-/**
- * テスト実行
- * @returns {Promise<void>}
- */
-async function runTests() {
-  console.log('=== OpenaiAgent テスト開始 ===\n');
+async function testExtractResponseText() {
+  const viaOutputText = {
+    output_text: '{"command":"none","arguments":[],"reasoning":"","outputs":[]}'
+  };
+  assert.equal(
+    extractResponseText(viaOutputText),
+    '{"command":"none","arguments":[],"reasoning":"","outputs":[]}'
+  );
 
-  // テスト1: createOpenAIClient
-  console.log('[テスト1] createOpenAIClient関数のテスト');
-  try {
-    const client = createOpenAIClient('test-api-key');
-    console.log('✓ クライアント作成成功:', client ? 'OK' : 'NG');
-  } catch (error) {
-    console.log('✗ エラー:', error.message);
-  }
-
-  // テスト2: getCommandSuggestion (モッククライアント)
-  console.log('\n[テスト2] getCommandSuggestion関数のテスト (モック)');
-  try {
-    const mockResponse = {
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              command: 'ffmpeg',
-              arguments: ['-i', 'input.mp4', 'output.mp4']
-            })
+  const viaOutputArray = {
+    output: [
+      {
+        content: [
+          {
+            type: 'output_text',
+            text: '{"hello":"world"}'
           }
+        ]
+      }
+    ]
+  };
+  assert.equal(extractResponseText(viaOutputArray), '{"hello":"world"}');
+}
+
+async function testValidateCommandPlan() {
+  const tmpDir = path.join(TMP_ROOT, 'outputs');
+  const plan = {
+    command: 'none',
+    arguments: [],
+    reasoning: 'not needed',
+    followUp: '',
+    outputs: [
+      {
+        path: path.join(tmpDir, 'sample.txt'),
+        description: 'sample file'
+      }
+    ]
+  };
+
+  const validated = validateCommandPlan(plan, tmpDir);
+  assert.equal(validated.outputs.length, 1);
+  assert.equal(path.resolve(validated.outputs[0].path), path.join(tmpDir, 'sample.txt'));
+
+  let threw = false;
+  try {
+    validateCommandPlan(
+      {
+        command: 'none',
+        arguments: [],
+        reasoning: '',
+        followUp: '',
+        outputs: [
+          {
+            path: path.join(process.cwd(), '..', 'bad.txt'),
+            description: 'invalid'
+          }
+        ]
+      },
+      tmpDir
+    );
+  } catch (error) {
+    threw = true;
+    assert.ok(error.message.includes('出力パス'));
+  }
+  assert.equal(threw, true);
+}
+
+async function testExecuteCommandPlanWithNone() {
+  const tmpDir = path.join(TMP_ROOT, 'outputs-none');
+  await fs.mkdir(tmpDir, { recursive: true });
+  const plan = validateCommandPlan(
+    {
+      command: 'none',
+      arguments: [],
+      reasoning: '',
+      followUp: '',
+      outputs: [
+        {
+          path: path.join(tmpDir, 'noresult.txt'),
+          description: 'placeholder'
         }
       ]
-    };
-    
-    const mockClient = createMockClient(mockResponse);
-    const result = await getCommandSuggestion(mockClient, '動画を変換したい');
-    console.log('✓ レスポンス取得成功:', result ? 'OK' : 'NG');
-    console.log('  レスポンス:', JSON.stringify(result, null, 2));
-  } catch (error) {
-    console.log('✗ エラー:', error.message);
-  }
+    },
+    tmpDir
+  );
 
-  // テスト3: 実際のAPIコール (環境変数がある場合のみ)
-  console.log('\n[テスト3] 実際のAPIコール');
-  if (process.env.OPENAI_API_KEY) {
-    try {
-      const client = createOpenAIClient();
-      console.log('✓ 実際のAPIキーが設定されています');
-      console.log('  (実際のAPI呼び出しはスキップ - コスト削減のため)');
-      // 実際に呼び出す場合は以下のコメントを外す
-      // const result = await getCommandSuggestion(client, '画像をリサイズしたい');
-      // console.log('  結果:', result);
-    } catch (error) {
-      console.log('✗ エラー:', error.message);
-    }
-  } else {
-    console.log('⚠ OPENAI_API_KEYが設定されていません (スキップ)');
-  }
-
-  console.log('\n=== テスト完了 ===');
+  const result = await executeCommandPlan(plan, { publicRoot: tmpDir });
+  assert.equal(result.exitCode, null);
+  assert.equal(result.timedOut, false);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, '');
+  assert.equal(result.resolvedOutputs.length, 1);
+  assert.equal(result.resolvedOutputs[0].exists, false);
 }
 
-// テスト実行
-runTests().catch(error => {
-  console.error('テスト実行エラー:', error);
+async function testRunAgentTaskWithMockClient() {
+  const mockClient = {
+    responses: {
+      create: async () => ({
+        output_text: JSON.stringify({
+          command: 'none',
+          arguments: [],
+          reasoning: 'No action required.',
+          followUp: '',
+          outputs: []
+        })
+      })
+    }
+  };
+
+  const tmpDir = path.join(process.cwd(), 'tmp-tests', 'agent-run');
+  await fs.mkdir(tmpDir, { recursive: true });
+
+  const { plan, result } = await runAgentTask(
+    mockClient,
+    {
+      task: '何もしないでください',
+      files: [],
+      outputDir: tmpDir
+    },
+    { publicRoot: tmpDir }
+  );
+
+  assert.equal(plan.command, 'none');
+  assert.equal(result.exitCode, null);
+  assert.ok(Array.isArray(result.resolvedOutputs));
+}
+
+async function cleanup() {
+  await fs.rm(TMP_ROOT, { recursive: true, force: true });
+}
+
+runTests().catch((error) => {
+  // eslint-disable-next-line no-console
+  console.error(error);
   process.exit(1);
 });

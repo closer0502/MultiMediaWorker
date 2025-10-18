@@ -57,6 +57,11 @@ build/Release/
 # Temporary folders
 tmp/
 temp/
+tmp-tests/
+
+# Application runtime storage
+storage/
+public/generated/
 
 # Optional npm cache directory
 .npm
