@@ -1,24 +1,29 @@
 import path from 'node:path';
 
+/** @typedef {import('../registry/ToolRegistry.js').ToolRegistry} ToolRegistry */
+/** @typedef {import('../shared/types.js').CommandPlan} CommandPlan */
+
 /**
- * Validates a command plan returned by the planner.
+ * プランナーから返されたコマンドプランの妥当性を検証するクラスです。
  */
 export class PlanValidator {
   /**
-   * @param {import('./ToolRegistry.js').ToolRegistry} toolRegistry
+   * 利用可能なコマンド一覧を持つツールレジストリを受け取ります。
+   * @param {ToolRegistry} toolRegistry
    */
   constructor(toolRegistry) {
     this.toolRegistry = toolRegistry;
   }
 
   /**
-   * @param {import('./types.js').CommandPlan} plan
+   * コマンドプランを検証し、不足項目を補完した上で返します。
+   * @param {CommandPlan} plan
    * @param {string} outputDir
-   * @returns {import('./types.js').CommandPlan}
+   * @returns {CommandPlan}
    */
   validate(plan, outputDir) {
     if (!plan || typeof plan !== 'object') {
-      throw new Error('コマンドプランが空です。');
+      throw new Error('コマンドプランが空か不正な形式です。');
     }
 
     if (!this.toolRegistry.hasCommand(plan.command)) {
@@ -41,29 +46,32 @@ export class PlanValidator {
       plan.outputs = [];
     }
 
+    if (typeof outputDir !== 'string' || !outputDir.trim()) {
+      throw new Error('出力ディレクトリが指定されていません。');
+    }
+
     const normalizedOutputDir = path.resolve(outputDir);
     plan.outputs = plan.outputs.map((item) => {
       if (!item || typeof item !== 'object') {
         throw new Error('outputs の要素が不正です。');
       }
 
-      if (typeof item.path !== 'string' || !item.path.trim()) {
-        throw new Error('outputs の path が不正です。');
+      const rawPath = typeof item.path === 'string' ? item.path.trim() : '';
+      if (!rawPath) {
+        throw new Error('outputs の path が指定されていません。');
       }
 
-      if (typeof item.description !== 'string') {
-        item.description = '';
-      }
-
-      const absolutePath = path.resolve(item.path);
+      const absolutePath = path.resolve(rawPath);
       const relative = path.relative(normalizedOutputDir, absolutePath);
       if (relative.startsWith('..') || path.isAbsolute(relative)) {
         throw new Error(`出力パスが許可ディレクトリ外です: ${item.path}`);
       }
 
+      const description = typeof item.description === 'string' ? item.description : '';
+
       return {
         path: absolutePath,
-        description: item.description
+        description
       };
     });
 

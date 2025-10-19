@@ -1,18 +1,21 @@
 // @ts-check
 
-import { DEFAULT_MODEL } from './constants.js';
+import OpenAI from 'openai';
+import { DEFAULT_MODEL } from '../config/constants.js';
 import { PromptBuilder } from './PromptBuilder.js';
 import { PlanValidator } from './PlanValidator.js';
 import { ResponseParser } from './ResponseParser.js';
-import OpenAI from 'openai';
+
+/** @typedef {import('../registry/ToolRegistry.js').ToolRegistry} ToolRegistry */
 
 /**
- * Handles prompt generation and plan creation via the OpenAI API.
+ * OpenAI APIを用いてタスク計画を生成するプランナーです。
  */
 export class OpenAIPlanner {
   /**
+   * OpenAIクライアントとツール情報を受け取り、計画生成に必要なコンポーネントを初期化します。
    * @param {OpenAI} client
-   * @param {import('./ToolRegistry.js').ToolRegistry} toolRegistry
+   * @param {ToolRegistry} toolRegistry
    * @param {{model?: string, promptBuilder?: PromptBuilder, planValidator?: PlanValidator}} [options]
    */
   constructor(client, toolRegistry, options = {}) {
@@ -24,9 +27,10 @@ export class OpenAIPlanner {
   }
 
   /**
-   * @param {import('./types.js').AgentRequest} request
+   * エージェントリクエストからプロンプトを構築し、OpenAIに問い合わせてコマンドプランを生成します。
+   * @param {import('../shared/types.js').AgentRequest} request
    * @param {{debug?: boolean, includeRawResponse?: boolean}} [options]
-   * @returns {Promise<{plan: import('./types.js').CommandPlan, rawPlan: any, debug?: Record<string, any>}>}
+   * @returns {Promise<{plan: import('../shared/types.js').CommandPlan, rawPlan: any, debug?: Record<string, any>}>}
    */
   async plan(request, options = {}) {
     const developerPrompt = this.promptBuilder.build(request);
@@ -88,8 +92,7 @@ export class OpenAIPlanner {
     try {
       const plan = this.planValidator.validate(parsed, request.outputDir);
       return { plan, rawPlan: parsed, debug };
-    } 
-    catch (error) {
+    } catch (error) {
       if (error && typeof error === 'object') {
         /** @type {Record<string, any>} */
         const errorObj = error;
@@ -104,6 +107,7 @@ export class OpenAIPlanner {
   }
 
   /**
+   * OpenAI Responses APIで求める返却JSONのスキーマを定義します。
    * @returns {OpenAI.Responses.ResponseFormatTextJSONSchemaConfig}
    */
   buildResponseFormat() {
@@ -159,6 +163,11 @@ export class OpenAIPlanner {
   }
 }
 
+/**
+ * 循環参照などが含まれるレスポンスを安全にシリアライズします。
+ * @param {any} value
+ * @returns {any}
+ */
 function safeSerialize(value) {
   try {
     return JSON.parse(JSON.stringify(value));

@@ -11,7 +11,7 @@ import { MediaAgentTaskError } from '../agent/index.js';
  */
 export class MediaAgentServer {
   /**
-   * @param {{agent: import('../agent/MediaAgent.js').MediaAgent, toolRegistry: import('../agent/ToolRegistry.js').ToolRegistry, publicRoot: string, generatedRoot: string, storageRoot: string, sessionInputRoot: string}} options
+   * @param {{agent: import('../agent/core/MediaAgent.js').MediaAgent, toolRegistry: import('../agent/registry/ToolRegistry.js').ToolRegistry, publicRoot: string, generatedRoot: string, storageRoot: string, sessionInputRoot: string}} options
    */
   constructor(options) {
     this.agent = options.agent;

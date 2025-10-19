@@ -1,10 +1,11 @@
-import { DEFAULT_TOOL_DEFINITIONS } from './constants.js';
+import { DEFAULT_TOOL_DEFINITIONS } from '../config/constants.js';
 
 /**
- * Keeps track of available CLI tools.
+ * 利用可能なCLIコマンドとそのメタ情報を管理するレジストリです。
  */
 export class ToolRegistry {
   /**
+   * 既定の定義に任意の追加定義をマージして初期化します。
    * @param {Record<string, {title: string, description: string}>} [definitions]
    */
   constructor(definitions) {
@@ -12,6 +13,7 @@ export class ToolRegistry {
   }
 
   /**
+   * 既定定義のみを使ってToolRegistryインスタンスを生成します。
    * @returns {ToolRegistry}
    */
   static createDefault() {
@@ -19,6 +21,7 @@ export class ToolRegistry {
   }
 
   /**
+   * 指定コマンドIDが登録済みか判定します。
    * @param {string} command
    * @returns {boolean}
    */
@@ -27,6 +30,7 @@ export class ToolRegistry {
   }
 
   /**
+   * すべてのコマンドIDを配列で返します。
    * @returns {string[]}
    */
   listCommandIds() {
@@ -34,6 +38,7 @@ export class ToolRegistry {
   }
 
   /**
+   * 実行可能なコマンドIDのみを抽出して返します。
    * @returns {string[]}
    */
   listExecutableCommandIds() {
@@ -41,6 +46,7 @@ export class ToolRegistry {
   }
 
   /**
+   * 実行可能なコマンドの概要リストを構築します。
    * @returns {Array<{id: string, title: string, description: string}>}
    */
   describeExecutableCommands() {

@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 
 /**
+ * OpenAIクライアントを生成するファクトリー関数です。
  * @param {string|undefined} apiKey
  * @returns {OpenAI}
  */

@@ -5,10 +5,11 @@ const DEFAULT_PHASES = [
 ];
 
 /**
- * Tracks progress across discrete phases for a task run.
+ * タスクの進行状況をフェーズごとに追跡するトラッカーです。
  */
 export class TaskPhaseTracker {
   /**
+   * 追跡するフェーズ定義を受け取り内部状態を初期化します。
    * @param {Array<{id: string, title: string}>} [phases]
    */
   constructor(phases = DEFAULT_PHASES) {
@@ -25,6 +26,7 @@ export class TaskPhaseTracker {
   }
 
   /**
+   * フェーズを開始状態にし、開始時刻やメタ情報を記録します。
    * @param {string} phaseId
    * @param {Record<string, any>} [meta]
    */
@@ -40,6 +42,7 @@ export class TaskPhaseTracker {
   }
 
   /**
+   * フェーズを成功状態で終了し、完了時刻とメタ情報を更新します。
    * @param {string} phaseId
    * @param {Record<string, any>} [meta]
    */
@@ -55,6 +58,7 @@ export class TaskPhaseTracker {
   }
 
   /**
+   * フェーズを失敗状態として終了し、発生したエラーを記録します。
    * @param {string} phaseId
    * @param {Error|string} error
    * @param {Record<string, any>} [meta]
@@ -79,6 +83,7 @@ export class TaskPhaseTracker {
   }
 
   /**
+   * フェーズに任意メッセージを追記します。
    * @param {string} phaseId
    * @param {string} message
    */
@@ -91,6 +96,7 @@ export class TaskPhaseTracker {
   }
 
   /**
+   * 現在保持しているフェーズ情報をディープコピーして返します。
    * @returns {Array<any>}
    */
   getPhases() {
@@ -101,6 +107,11 @@ export class TaskPhaseTracker {
     }));
   }
 
+  /**
+   * 内部用ヘルパーとしてフェーズを検索します。
+   * @param {string} phaseId
+   * @returns {any}
+   */
   _findPhase(phaseId) {
     return this._phases.find((phase) => phase.id === phaseId);
   }

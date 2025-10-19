@@ -1,8 +1,9 @@
 /**
- * Extracts the textual payload from OpenAI's Responses API output.
+ * OpenAIレスポンスからテキスト部分を抽出するヘルパークラスです。
  */
 export class ResponseParser {
   /**
+   * 各種レスポンス構造から最初に見つかったテキストを取り出します。
    * @param {any} response
    * @returns {string}
    */
@@ -34,7 +35,7 @@ export class ResponseParser {
           return content;
         }
         if (Array.isArray(content)) {
-          const textChunk = content.find((part) => part.type === 'text');
+          const textChunk = content.find((part) => part.type === 'text' && typeof part.text === 'string');
           if (textChunk && typeof textChunk.text === 'string') {
             return textChunk.text;
           }

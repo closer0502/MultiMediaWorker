@@ -4,10 +4,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 /**
- * Executes validated command plans and returns runtime metadata.
+ * 検証済みのコマンドプランを実行して実行結果を取りまとめるクラスです。
  */
 export class CommandExecutor {
   /**
+   * タイムアウトなどの基本設定を受け取り初期化します。
    * @param {{timeoutMs?: number}} [options]
    */
   constructor(options = {}) {
@@ -15,9 +16,10 @@ export class CommandExecutor {
   }
 
   /**
-   * @param {import('./types.js').CommandPlan} plan
-   * @param {import('./types.js').CommandExecutionOptions} [options]
-   * @returns {Promise<import('./types.js').CommandExecutionResult>}
+   * コマンドプランを実行し、標準出力・エラーなどの結果を返します。
+   * @param {import('../shared/types.js').CommandPlan} plan
+   * @param {import('../shared/types.js').CommandExecutionOptions} [options]
+   * @returns {Promise<import('../shared/types.js').CommandExecutionResult>}
    */
   async execute(plan, options = {}) {
     const cwd = options.cwd || process.cwd();
@@ -52,7 +54,8 @@ export class CommandExecutor {
   }
 
   /**
-   * @param {import('./types.js').CommandOutputPlan[]} outputs
+   * 出力予定のファイルが置かれるディレクトリを作成します。
+   * @param {import('../shared/types.js').CommandOutputPlan[]} outputs
    * @returns {Promise<void>}
    */
   async ensureOutputDirectories(outputs) {
@@ -61,9 +64,10 @@ export class CommandExecutor {
   }
 
   /**
-   * @param {import('./types.js').CommandOutputPlan[]} outputs
+   * 出力ファイルの実在確認や公開パスを付加して詳細情報を組み立てます。
+   * @param {import('../shared/types.js').CommandOutputPlan[]} outputs
    * @param {string|null} publicRoot
-   * @returns {Promise<import('./types.js').DescribedOutput[]>}
+   * @returns {Promise<import('../shared/types.js').DescribedOutput[]>}
    */
   async describeOutputs(outputs, publicRoot) {
     const described = [];
@@ -95,6 +99,7 @@ export class CommandExecutor {
   }
 
   /**
+   * 子プロセスを起動して標準出力／エラーを収集します。
    * @param {string} command
    * @param {string[]} args
    * @param {string} cwd

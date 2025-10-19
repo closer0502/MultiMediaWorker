@@ -1,5 +1,9 @@
+/**
+ * エージェント実行時に発生したエラーとフェーズ情報をひとまとめにする例外クラスです。
+ */
 export class MediaAgentTaskError extends Error {
   /**
+   * エラー本文・実行フェーズ・追加コンテキストを受け取り例外を構築します。
    * @param {string} message
    * @param {Array<any>} phases
    * @param {{cause?: any, context?: Record<string, any>}} [options]

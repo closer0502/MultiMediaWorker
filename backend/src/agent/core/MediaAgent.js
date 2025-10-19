@@ -1,14 +1,15 @@
-import { CommandExecutor } from './CommandExecutor.js';
-import { OpenAIPlanner } from './OpenAIPlanner.js';
-import { ToolRegistry } from './ToolRegistry.js';
+import { CommandExecutor } from '../execution/CommandExecutor.js';
+import { OpenAIPlanner } from '../planning/OpenAIPlanner.js';
+import { ToolRegistry } from '../registry/ToolRegistry.js';
 import { TaskPhaseTracker } from './TaskPhaseTracker.js';
-import { MediaAgentTaskError } from './errors.js';
+import { MediaAgentTaskError } from './MediaAgentTaskError.js';
 
 /**
- * High-level orchestrator that ties the planner and executor together.
+ * メディア処理タスクの計画と実行を統括するエージェント。
  */
 export class MediaAgent {
   /**
+   * 依存するプランナー・実行器・ツールレジストリを受け取り初期化します。
    * @param {{planner: OpenAIPlanner, executor: CommandExecutor, toolRegistry: ToolRegistry}} deps
    */
   constructor({ planner, executor, toolRegistry }) {
@@ -18,9 +19,10 @@ export class MediaAgent {
   }
 
   /**
-   * @param {import('./types.js').AgentRequest} request
-   * @param {import('./types.js').CommandExecutionOptions & {dryRun?: boolean, debug?: boolean, includeRawResponse?: boolean}} [options]
-   * @returns {Promise<{plan: import('./types.js').CommandPlan, rawPlan: any, result: import('./types.js').CommandExecutionResult, phases: Array<any>, debug?: Record<string, any>}>}
+   * タスクを計画してから実行し、結果と進捗ログをまとめて返します。
+   * @param {import('../shared/types.js').AgentRequest} request
+   * @param {import('../shared/types.js').CommandExecutionOptions & {dryRun?: boolean, debug?: boolean, includeRawResponse?: boolean}} [options]
+   * @returns {Promise<{plan: import('../shared/types.js').CommandPlan, rawPlan: any, result: import('../shared/types.js').CommandExecutionResult, phases: Array<any>, debug?: Record<string, any>}>}
    */
   async runTask(request, options = {}) {
     const { dryRun = false, debug = false, includeRawResponse = false, ...executionOptions } = options;
@@ -83,6 +85,7 @@ export class MediaAgent {
   }
 
   /**
+   * 現在使用可能なツールレジストリを返します。
    * @returns {ToolRegistry}
    */
   getToolRegistry() {
@@ -91,7 +94,7 @@ export class MediaAgent {
 }
 
 /**
- * Factory helper for standard agent wiring.
+ * 標準構成のメディアエージェントを生成します。
  * @param {import('openai').Client} client
  * @param {{toolRegistry?: ToolRegistry, executorOptions?: {timeoutMs?: number}, model?: string}} [options]
  * @returns {MediaAgent}
