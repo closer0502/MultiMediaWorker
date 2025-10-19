@@ -4,13 +4,14 @@ import { DEFAULT_MODEL } from './constants.js';
 import { PromptBuilder } from './PromptBuilder.js';
 import { PlanValidator } from './PlanValidator.js';
 import { ResponseParser } from './ResponseParser.js';
+import OpenAI from 'openai';
 
 /**
  * Handles prompt generation and plan creation via the OpenAI API.
  */
 export class OpenAIPlanner {
   /**
-   * @param {import('openai').Client} client
+   * @param {OpenAI} client
    * @param {import('./ToolRegistry.js').ToolRegistry} toolRegistry
    * @param {{model?: string, promptBuilder?: PromptBuilder, planValidator?: PlanValidator}} [options]
    */
@@ -29,7 +30,7 @@ export class OpenAIPlanner {
    */
   async plan(request, options = {}) {
     const developerPrompt = this.promptBuilder.build(request);
-    /** @type {import('openai/resources/responses/responses').ResponseCreateParamsNonStreaming} */
+    /** @type {OpenAI.Responses.ResponseCreateParamsNonStreaming} */
     const responsePayload = {
       model: this.model,
       input: [
@@ -76,31 +77,34 @@ export class OpenAIPlanner {
 
     const debug = options.debug
       ? {
-          model: this.model,
-          developerPrompt,
-          responseText,
-          parsed,
-          rawResponse: options.includeRawResponse ? safeSerialize(response) : undefined
-        }
+        model: this.model,
+        developerPrompt,
+        responseText,
+        parsed,
+        rawResponse: options.includeRawResponse ? safeSerialize(response) : undefined
+      }
       : undefined;
 
     try {
       const plan = this.planValidator.validate(parsed, request.outputDir);
       return { plan, rawPlan: parsed, debug };
-    } catch (error) {
+    } 
+    catch (error) {
       if (error && typeof error === 'object') {
-        error.rawPlan = parsed;
+        /** @type {Record<string, any>} */
+        const errorObj = error;
+        errorObj.rawPlan = parsed;
         if (debug) {
-          error.debug = debug;
+          errorObj.debug = debug;
         }
-        error.responseText = responseText;
+        errorObj.responseText = responseText;
       }
       throw error;
     }
   }
 
   /**
-   * @returns {import('openai/resources/responses/responses').ResponseFormatTextJSONSchemaConfig}
+   * @returns {OpenAI.Responses.ResponseFormatTextJSONSchemaConfig}
    */
   buildResponseFormat() {
     return {
@@ -159,6 +163,6 @@ function safeSerialize(value) {
   try {
     return JSON.parse(JSON.stringify(value));
   } catch {
-    return null;
+    return undefined;
   }
 }
