@@ -3,6 +3,12 @@ import { OpenAIPlanner } from '../planning/OpenAIPlanner.js';
 import { ToolRegistry } from '../registry/ToolRegistry.js';
 import { TaskPhaseTracker } from './TaskPhaseTracker.js';
 import { MediaAgentTaskError } from './MediaAgentTaskError.js';
+import OpenAI from 'openai';
+
+/** @typedef {import('../index.js').AgentRequest} AgentRequest */
+/** @typedef {import('../index.js').CommandPlan} CommandPlan */
+/** @typedef {import('../index.js').CommandExecutionOptions} CommandExecutionOptions */
+/** @typedef {import('../index.js').CommandExecutionResult} CommandExecutionResult */
 
 /**
  * メディア処理タスクの計画と実行を統括するエージェント。
@@ -20,9 +26,9 @@ export class MediaAgent {
 
   /**
    * タスクを計画してから実行し、結果と進捗ログをまとめて返します。
-   * @param {import('../shared/types.js').AgentRequest} request
-   * @param {import('../shared/types.js').CommandExecutionOptions & {dryRun?: boolean, debug?: boolean, includeRawResponse?: boolean}} [options]
-   * @returns {Promise<{plan: import('../shared/types.js').CommandPlan, rawPlan: any, result: import('../shared/types.js').CommandExecutionResult, phases: Array<any>, debug?: Record<string, any>}>}
+   * @param {AgentRequest} request
+   * @param {CommandExecutionOptions & {dryRun?: boolean, debug?: boolean, includeRawResponse?: boolean}} [options]
+   * @returns {Promise<{plan: CommandPlan, rawPlan: any, result: CommandExecutionResult, phases: Array<any>, debug?: Record<string, any>}>}
    */
   async runTask(request, options = {}) {
     const { dryRun = false, debug = false, includeRawResponse = false, ...executionOptions } = options;
@@ -95,7 +101,7 @@ export class MediaAgent {
 
 /**
  * 標準構成のメディアエージェントを生成します。
- * @param {import('openai').Client} client
+ * @param {OpenAI} client
  * @param {{toolRegistry?: ToolRegistry, executorOptions?: {timeoutMs?: number}, model?: string}} [options]
  * @returns {MediaAgent}
  */

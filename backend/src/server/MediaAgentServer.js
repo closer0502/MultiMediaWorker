@@ -6,12 +6,19 @@ import fs from 'node:fs/promises';
 
 import { MediaAgentTaskError } from '../agent/index.js';
 
+/** @typedef {import('../agent/index.js').MediaAgent} MediaAgent */
+/** @typedef {import('../agent/index.js').ToolRegistry} ToolRegistry */
+/** @typedef {import('express').Request} ExpressRequest */
+/** @typedef {import('express').Response} ExpressResponse */
+/** @typedef {import('express').NextFunction} ExpressNextFunction */
+
 /**
- * Express based API server that wires the media agent to HTTP endpoints.
+ * メディアエージェントをHTTPエンドポイントと連携させるExpressベースのAPIサーバー
  */
 export class MediaAgentServer {
   /**
-   * @param {{agent: import('../agent/core/MediaAgent.js').MediaAgent, toolRegistry: import('../agent/registry/ToolRegistry.js').ToolRegistry, publicRoot: string, generatedRoot: string, storageRoot: string, sessionInputRoot: string}} options
+   * サーバーインスタンスを初期化
+   * @param {{agent: MediaAgent, toolRegistry: ToolRegistry, publicRoot: string, generatedRoot: string, storageRoot: string, sessionInputRoot: string}} options サーバー設定オプション
    */
   constructor(options) {
     this.agent = options.agent;
@@ -30,7 +37,8 @@ export class MediaAgentServer {
   }
 
   /**
-   * @param {number} port
+   * サーバーを起動し、指定ポートでリクエストを受け付ける
+   * @param {number} port ポート番号
    * @returns {Promise<void>}
    */
   async start(port) {
@@ -47,6 +55,7 @@ export class MediaAgentServer {
   }
 
   /**
+   * サーバーを停止する
    * @returns {Promise<void>}
    */
   async stop() {
@@ -64,6 +73,9 @@ export class MediaAgentServer {
     });
   }
 
+  /**
+   * CORSや静的ファイル配信などのミドルウェアを設定
+   */
   configureMiddleware() {
     this.app.use(cors());
     this.app.use(express.json());
@@ -75,6 +87,9 @@ export class MediaAgentServer {
     );
   }
 
+  /**
+   * APIルートとエラーハンドラを設定
+   */
   configureRoutes() {
     this.app.get('/api/tools', this.handleGetTools);
     this.app.post('/api/tasks', this.prepareSession, this.upload.array('files'), this.handleTaskRequest);
@@ -93,8 +108,9 @@ export class MediaAgentServer {
   }
 
   /**
-   * @param {import('express').Request} req
-   * @param {import('express').Response} res
+   * 利用可能なツール一覧を返すエンドポイント
+   * @param {ExpressRequest} req リクエスト
+   * @param {ExpressResponse} res レスポンス
    */
   handleGetTools(req, res) {
     res.json({
@@ -103,9 +119,10 @@ export class MediaAgentServer {
   }
 
   /**
-   * @param {import('express').Request} req
-   * @param {import('express').Response} res
-   * @param {import('express').NextFunction} next
+   * セッションIDと入出力ディレクトリを準備するミドルウェア
+   * @param {ExpressRequest} req リクエスト
+   * @param {ExpressResponse} res レスポンス
+   * @param {ExpressNextFunction} next 次のミドルウェア
    */
   async prepareSession(req, res, next) {
     try {
@@ -129,8 +146,9 @@ export class MediaAgentServer {
   }
 
   /**
-   * @param {import('express').Request} req
-   * @param {import('express').Response} res
+   * タスクリクエストを処理し、エージェントを実行してレスポンスを返す
+   * @param {ExpressRequest} req リクエスト
+   * @param {ExpressResponse} res レスポンス
    */
   async handleTaskRequest(req, res) {
     const task = (req.body?.task || '').trim();
@@ -211,7 +229,8 @@ export class MediaAgentServer {
   }
 
   /**
-   * @returns {multer.Multer}
+   * ファイルアップロード用のmulterインスタンスを作成
+   * @returns {multer.Multer} multerインスタンス
    */
   createUploader() {
     return multer({
@@ -231,6 +250,10 @@ export class MediaAgentServer {
     });
   }
 
+  /**
+   * 必要なベースディレクトリを作成
+   * @returns {Promise<void>}
+   */
   async ensureBaseDirectories() {
     await Promise.all(
       [this.publicRoot, this.generatedRoot, this.storageRoot, this.sessionInputRoot].map((dir) =>
@@ -240,11 +263,20 @@ export class MediaAgentServer {
   }
 }
 
+/**
+ * セッションIDを生成（タイムスタンプ+ランダム文字列）
+ * @returns {string} セッションID
+ */
 function createSessionId() {
   const randomPart = Math.random().toString(36).slice(2, 8);
   return `session-${Date.now()}-${randomPart}`;
 }
 
+/**
+ * ファイル名を安全な形式にサニタイズ
+ * @param {string} name 元のファイル名
+ * @returns {string} サニタイズ済みファイル名
+ */
 function createSafeFileName(name) {
   const baseName = path.basename(name);
   const sanitized = baseName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
@@ -255,6 +287,13 @@ function createSafeFileName(name) {
   return sanitized.slice(0, 200);
 }
 
+/**
+ * リクエスト受信時のフェーズ情報を作成
+ * @param {string} task タスク内容
+ * @param {Array} files アップロードファイル一覧
+ * @param {Object} options オプション（dryRun、debugなど）
+ * @returns {Object} フェーズオブジェクト
+ */
 function createRequestPhase(task, files, options = {}) {
   const now = new Date().toISOString();
   return {
@@ -274,6 +313,11 @@ function createRequestPhase(task, files, options = {}) {
   };
 }
 
+/**
+ * クエリパラメータをboolean値にパース
+ * @param {*} value クエリパラメータ値
+ * @returns {boolean} パース結果
+ */
 function parseBoolean(value) {
   const normalized = getFirstQueryValue(value);
   if (normalized === undefined) {
@@ -282,6 +326,11 @@ function parseBoolean(value) {
   return ['1', 'true', 'yes', 'on'].includes(normalized.toLowerCase());
 }
 
+/**
+ * デバッグモードのクエリパラメータをパース
+ * @param {*} value クエリパラメータ値
+ * @returns {{enabled: boolean, includeRaw: boolean}} デバッグモード設定
+ */
 function parseDebugMode(value) {
   const normalized = getFirstQueryValue(value);
   if (!normalized) {
@@ -294,6 +343,11 @@ function parseDebugMode(value) {
   };
 }
 
+/**
+ * クエリパラメータが配列の場合は最初の値を取得
+ * @param {*} value クエリパラメータ値
+ * @returns {string | undefined} 最初の値またはundefined
+ */
 function getFirstQueryValue(value) {
   if (Array.isArray(value)) {
     return value[0];

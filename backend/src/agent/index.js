@@ -9,3 +9,6 @@ export { createOpenAIClient } from './integrations/OpenAIClientFactory.js';
 export { MediaAgent, createMediaAgent } from './core/MediaAgent.js';
 export { TaskPhaseTracker, DEFAULT_TASK_PHASES } from './core/TaskPhaseTracker.js';
 export { MediaAgentTaskError } from './core/MediaAgentTaskError.js';
+
+// 型定義のエクスポート
+export * from './shared/types.js';

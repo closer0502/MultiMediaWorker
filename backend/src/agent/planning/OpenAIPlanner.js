@@ -6,7 +6,9 @@ import { PromptBuilder } from './PromptBuilder.js';
 import { PlanValidator } from './PlanValidator.js';
 import { ResponseParser } from './ResponseParser.js';
 
-/** @typedef {import('../registry/ToolRegistry.js').ToolRegistry} ToolRegistry */
+/** @typedef {import('../index.js').ToolRegistry} ToolRegistry */
+/** @typedef {import('../index.js').AgentRequest} AgentRequest */
+/** @typedef {import('../index.js').CommandPlan} CommandPlan */
 
 /**
  * OpenAI APIを用いてタスク計画を生成するプランナーです。
@@ -28,9 +30,9 @@ export class OpenAIPlanner {
 
   /**
    * エージェントリクエストからプロンプトを構築し、OpenAIに問い合わせてコマンドプランを生成します。
-   * @param {import('../shared/types.js').AgentRequest} request
+   * @param {AgentRequest} request
    * @param {{debug?: boolean, includeRawResponse?: boolean}} [options]
-   * @returns {Promise<{plan: import('../shared/types.js').CommandPlan, rawPlan: any, debug?: Record<string, any>}>}
+   * @returns {Promise<{plan: CommandPlan, rawPlan: any, debug?: Record<string, any>}>}
    */
   async plan(request, options = {}) {
     const developerPrompt = this.promptBuilder.build(request);
