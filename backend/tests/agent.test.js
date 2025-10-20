@@ -27,11 +27,22 @@ async function runTests() {
 
 async function testResponseParser() {
   const viaOutputText = {
-    output_text: '{"command":"none","arguments":[],"reasoning":"","outputs":[]}'
+    output_text: JSON.stringify({
+      overview: '',
+      followUp: '',
+      steps: [
+        {
+          command: 'none',
+          arguments: [],
+          reasoning: 'No work required.',
+          outputs: []
+        }
+      ]
+    })
   };
   assert.equal(
     ResponseParser.extractText(viaOutputText),
-    '{"command":"none","arguments":[],"reasoning":"","outputs":[]}'
+    '{"overview":"","followUp":"","steps":[{"command":"none","arguments":[],"reasoning":"No work required.","outputs":[]}]}'
   );
 
   const viaOutputArray = {
@@ -52,47 +63,81 @@ async function testResponseParser() {
 async function testPlanValidator() {
   const validator = new PlanValidator(toolRegistry);
   const tmpDir = path.join(TMP_ROOT, 'outputs');
-  const plan = {
+  const legacyPlan = {
     command: 'none',
     arguments: [],
-    reasoning: 'not needed',
+    reasoning: 'legacy structure',
     followUp: '',
     outputs: [
       {
-        path: path.join(tmpDir, 'sample.txt'),
-        description: 'sample file'
+        path: path.join(tmpDir, 'legacy.txt'),
+        description: 'legacy file'
       }
     ]
   };
 
-  const validated = validator.validate(plan, tmpDir);
-  assert.equal(validated.outputs.length, 1);
-  assert.equal(path.resolve(validated.outputs[0].path), path.join(tmpDir, 'sample.txt'));
-
-  const withoutOutputs = validator.validate(
+  // Legacy plans should still be accepted via the planner normalisation.
+  const normalized = validator.validate(
     {
-      command: 'none',
-      arguments: [],
-      reasoning: '',
-      followUp: ''
+      overview: legacyPlan.reasoning,
+      followUp: legacyPlan.followUp,
+      steps: [
+        {
+          command: legacyPlan.command,
+          arguments: legacyPlan.arguments,
+          reasoning: legacyPlan.reasoning,
+          outputs: legacyPlan.outputs
+        }
+      ]
     },
     tmpDir
   );
-  assert.ok(Array.isArray(withoutOutputs.outputs));
-  assert.equal(withoutOutputs.outputs.length, 0);
+
+  assert.equal(normalized.steps.length, 1);
+  assert.equal(normalized.steps[0].command, 'none');
+  assert.equal(path.resolve(normalized.steps[0].outputs[0].path), path.join(tmpDir, 'legacy.txt'));
+
+  const plan = validator.validate(
+    {
+      overview: 'No execution required',
+      followUp: '',
+      steps: [
+        {
+          command: 'none',
+          arguments: [],
+          reasoning: 'Skip execution.',
+          outputs: [
+            {
+              path: path.join(tmpDir, 'sample.txt'),
+              description: 'sample file'
+            }
+          ]
+        }
+      ]
+    },
+    tmpDir
+  );
+
+  assert.equal(plan.steps.length, 1);
+  assert.equal(plan.steps[0].outputs.length, 1);
 
   let threw = false;
   try {
     validator.validate(
       {
-        command: 'none',
-        arguments: [],
-        reasoning: '',
+        overview: '',
         followUp: '',
-        outputs: [
+        steps: [
           {
-            path: path.join(process.cwd(), '..', 'bad.txt'),
-            description: 'invalid'
+            command: 'none',
+            arguments: [],
+            reasoning: '',
+            outputs: [
+              {
+                path: path.join(process.cwd(), '..', 'bad.txt'),
+                description: 'invalid'
+              }
+            ]
           }
         ]
       },
@@ -100,7 +145,7 @@ async function testPlanValidator() {
     );
   } catch (error) {
     threw = true;
-    assert.ok(error.message.includes('出力パス'));
+    assert.ok(error.message.includes('Output path'));
   }
   assert.equal(threw, true);
 }
@@ -112,7 +157,7 @@ async function testTaskPhaseTracker() {
   ]);
   tracker.start('plan');
   tracker.log('plan', 'starting planner');
-  tracker.complete('plan', { command: 'none' });
+  tracker.complete('plan', { steps: 1 });
   tracker.start('execute');
   tracker.fail('execute', new Error('mock failure'));
 
@@ -131,14 +176,19 @@ async function testCommandExecutorWithNone() {
   await fs.mkdir(tmpDir, { recursive: true });
   const plan = validator.validate(
     {
-      command: 'none',
-      arguments: [],
-      reasoning: '',
+      overview: '',
       followUp: '',
-      outputs: [
+      steps: [
         {
-          path: path.join(tmpDir, 'noresult.txt'),
-          description: 'placeholder'
+          command: 'none',
+          arguments: [],
+          reasoning: 'No operation required.',
+          outputs: [
+            {
+              path: path.join(tmpDir, 'noresult.txt'),
+              description: 'placeholder'
+            }
+          ]
         }
       ]
     },
@@ -153,6 +203,9 @@ async function testCommandExecutorWithNone() {
   assert.equal(result.resolvedOutputs.length, 1);
   assert.equal(result.resolvedOutputs[0].exists, false);
   assert.equal(result.dryRun, true);
+  assert.equal(result.steps.length, 1);
+  assert.equal(result.steps[0].status, 'skipped');
+  assert.equal(result.steps[0].skipReason, 'no_op_command');
 }
 
 async function testMediaAgentWithMockClient() {
@@ -160,11 +213,16 @@ async function testMediaAgentWithMockClient() {
     responses: {
       create: async () => ({
         output_text: JSON.stringify({
-          command: 'none',
-          arguments: [],
-          reasoning: 'No action required.',
+          overview: 'No action required.',
           followUp: '',
-          outputs: []
+          steps: [
+            {
+              command: 'none',
+              arguments: [],
+              reasoning: 'Nothing to execute.',
+              outputs: []
+            }
+          ]
         })
       })
     }
@@ -176,16 +234,19 @@ async function testMediaAgentWithMockClient() {
   const agent = createMediaAgent(mockClient, { toolRegistry });
   const { plan, rawPlan, result, phases, debug } = await agent.runTask(
     {
-      task: '何もしないでください',
+      task: 'No additional processing required',
       files: [],
       outputDir: tmpDir
     },
     { publicRoot: tmpDir, dryRun: true, debug: true }
   );
 
-  assert.equal(plan.command, 'none');
+  assert.ok(Array.isArray(plan.steps));
+  assert.equal(plan.steps.length, 1);
+  assert.equal(plan.steps[0].command, 'none');
   assert.equal(result.exitCode, null);
   assert.ok(Array.isArray(result.resolvedOutputs));
+  assert.ok(Array.isArray(result.steps));
   assert.ok(Array.isArray(phases));
   assert.equal(phases[0].id, 'plan');
   assert.equal(phases[1].id, 'execute');

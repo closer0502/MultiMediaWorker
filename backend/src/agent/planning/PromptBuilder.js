@@ -4,11 +4,10 @@ import path from 'node:path';
 /** @typedef {import('../shared/types.js').AgentRequest} AgentRequest */
 
 /**
- * OpenAIプランナー向けの開発者プロンプトを組み立てるビルダーです。
+ * Builds the developer prompt that guides the planner model.
  */
 export class PromptBuilder {
   /**
-   * 利用可能なツール定義を基にインスタンスを構築します。
    * @param {ToolRegistry} toolRegistry
    */
   constructor(toolRegistry) {
@@ -16,7 +15,7 @@ export class PromptBuilder {
   }
 
   /**
-   * エージェントリクエストを受け取り、プロンプト文字列を生成します。
+   * Generates a multi-step planning instruction for the model.
    * @param {AgentRequest} request
    * @returns {string}
    */
@@ -41,22 +40,24 @@ export class PromptBuilder {
               return lines.join('\n');
             })
             .join('\n')
-        : '添付ファイルはありません。';
+        : 'No input files were provided.';
 
     return [
-      'あなたはマルチメディア処理を支援するCLIアシスタントです。',
-      '利用可能なコマンドは次の通りです:',
+      'You are a multimedia conversion CLI assistant.',
+      'Available commands:',
       toolSummary,
-      '入力ファイル一覧:',
+      'Input files:',
       fileSummary,
-      `新しいファイルは必ず次のディレクトリ配下に生成してください: ${normalizePath(request.outputDir)}`,
-      '要件:',
-      '- 返却はJSONのみ。',
-      `- commandは ${this.toolRegistry.listCommandIds().join(' / ')} のいずれか。`,
-      '- argumentsにはコマンドライン引数を実行順通りに格納。',
-      '- outputsには生成予定のファイル(未生成の可能性があっても)を列挙。',
-      '- 実行できない場合は command を none とし理由を reasoning に記載。',
-      '- ファイルパスは絶対パスで記載。'
+      `Place any new files inside: ${normalizePath(request.outputDir)}`,
+      'Rules:',
+      '- Output must be JSON only.',
+      '- Define an ordered array of command steps in the steps property.',
+      `- Each step command must be one of ${this.toolRegistry.listCommandIds().join(' / ')}; use none if nothing should run.`,
+      '- arguments must list CLI arguments in execution order.',
+      '- reasoning should briefly explain why the step is needed.',
+      '- outputs must list planned files (even if they may not exist yet).',
+      '- Add followUp or overview strings when helpful.',
+      '- Use absolute paths and keep every path inside outputDir.'
     ].join('\n\n');
   }
 }

@@ -11,11 +11,10 @@ import OpenAI from 'openai';
 /** @typedef {import('../index.js').CommandExecutionResult} CommandExecutionResult */
 
 /**
- * メディア処理タスクの計画と実行を統括するエージェント。
+ * Orchestrates planning and executing multimedia workflows.
  */
 export class MediaAgent {
   /**
-   * 依存するプランナー・実行器・ツールレジストリを受け取り初期化します。
    * @param {{planner: OpenAIPlanner, executor: CommandExecutor, toolRegistry: ToolRegistry}} deps
    */
   constructor({ planner, executor, toolRegistry }) {
@@ -25,7 +24,7 @@ export class MediaAgent {
   }
 
   /**
-   * タスクを計画してから実行し、結果と進捗ログをまとめて返します。
+   * Produces a command plan and executes it.
    * @param {AgentRequest} request
    * @param {CommandExecutionOptions & {dryRun?: boolean, debug?: boolean, includeRawResponse?: boolean}} [options]
    * @returns {Promise<{plan: CommandPlan, rawPlan: any, result: CommandExecutionResult, phases: Array<any>, debug?: Record<string, any>}>}
@@ -43,7 +42,10 @@ export class MediaAgent {
       plan = planResult.plan;
       rawPlan = planResult.rawPlan;
       debugInfo = planResult.debug;
-      tracker.complete('plan', { command: plan.command });
+      tracker.complete('plan', {
+        steps: plan.steps.length,
+        commands: plan.steps.map((step) => step.command)
+      });
     } catch (error) {
       tracker.fail('plan', error);
       throw new MediaAgentTaskError('Plan phase failed', tracker.getPhases(), {
@@ -66,7 +68,14 @@ export class MediaAgent {
       tracker.complete('execute', {
         exitCode: result.exitCode,
         timedOut: result.timedOut,
-        dryRun: dryRun || result?.dryRun || false
+        dryRun: dryRun || result?.dryRun || false,
+        steps: result.steps.map((step) => ({
+          command: step.command,
+          status: step.status,
+          exitCode: step.exitCode,
+          timedOut: step.timedOut,
+          skipReason: step.skipReason
+        }))
       });
     } catch (error) {
       tracker.fail('execute', error);
@@ -91,7 +100,7 @@ export class MediaAgent {
   }
 
   /**
-   * 現在使用可能なツールレジストリを返します。
+   * Returns the tool registry currently in use.
    * @returns {ToolRegistry}
    */
   getToolRegistry() {
@@ -100,7 +109,7 @@ export class MediaAgent {
 }
 
 /**
- * 標準構成のメディアエージェントを生成します。
+ * Factory helper to create a fully wired MediaAgent.
  * @param {OpenAI} client
  * @param {{toolRegistry?: ToolRegistry, executorOptions?: {timeoutMs?: number}, model?: string}} [options]
  * @returns {MediaAgent}
@@ -116,3 +125,4 @@ export function createMediaAgent(client, options = {}) {
     toolRegistry
   });
 }
+

@@ -4,11 +4,10 @@ import path from 'node:path';
 /** @typedef {import('../shared/types.js').CommandPlan} CommandPlan */
 
 /**
- * プランナーから返されたコマンドプランの妥当性を検証するクラスです。
+ * Validates command plans produced by the planner before execution.
  */
 export class PlanValidator {
   /**
-   * 利用可能なコマンド一覧を持つツールレジストリを受け取ります。
    * @param {ToolRegistry} toolRegistry
    */
   constructor(toolRegistry) {
@@ -16,65 +15,110 @@ export class PlanValidator {
   }
 
   /**
-   * コマンドプランを検証し、不足項目を補完した上で返します。
+   * Validates the structure of a command plan and normalises file paths.
    * @param {CommandPlan} plan
    * @param {string} outputDir
    * @returns {CommandPlan}
    */
   validate(plan, outputDir) {
     if (!plan || typeof plan !== 'object') {
-      throw new Error('コマンドプランが空か不正な形式です。');
+      throw new Error('Command plan is invalid.');
     }
 
-    if (!this.toolRegistry.hasCommand(plan.command)) {
-      throw new Error(`未対応のコマンドです: ${plan.command}`);
+    if (typeof outputDir !== 'string' || !outputDir.trim()) {
+      throw new Error('Output directory is not specified.');
     }
 
-    if (!Array.isArray(plan.arguments) || !plan.arguments.every((arg) => typeof arg === 'string')) {
-      throw new Error('arguments は文字列配列である必要があります。');
-    }
-
-    if (typeof plan.reasoning !== 'string') {
-      plan.reasoning = '';
+    if (!Array.isArray(plan.steps) || plan.steps.length === 0) {
+      throw new Error('Command steps are missing.');
     }
 
     if (typeof plan.followUp !== 'string') {
       plan.followUp = '';
     }
 
-    if (!Array.isArray(plan.outputs)) {
-      plan.outputs = [];
-    }
-
-    if (typeof outputDir !== 'string' || !outputDir.trim()) {
-      throw new Error('出力ディレクトリが指定されていません。');
+    if (typeof plan.overview !== 'string') {
+      plan.overview = '';
     }
 
     const normalizedOutputDir = path.resolve(outputDir);
-    plan.outputs = plan.outputs.map((item) => {
-      if (!item || typeof item !== 'object') {
-        throw new Error('outputs の要素が不正です。');
-      }
-
-      const rawPath = typeof item.path === 'string' ? item.path.trim() : '';
-      if (!rawPath) {
-        throw new Error('outputs の path が指定されていません。');
-      }
-
-      const absolutePath = path.resolve(rawPath);
-      const relative = path.relative(normalizedOutputDir, absolutePath);
-      if (relative.startsWith('..') || path.isAbsolute(relative)) {
-        throw new Error(`出力パスが許可ディレクトリ外です: ${item.path}`);
-      }
-
-      const description = typeof item.description === 'string' ? item.description : '';
-
-      return {
-        path: absolutePath,
-        description
-      };
-    });
+    plan.steps = plan.steps.map((rawStep, index) => this.validateStep(rawStep, index, normalizedOutputDir));
 
     return plan;
   }
+
+  /**
+   * @param {any} rawStep
+   * @param {number} index
+   * @param {string} normalizedOutputDir
+   * @returns {import('../shared/types.js').CommandStepPlan}
+   */
+  validateStep(rawStep, index, normalizedOutputDir) {
+    if (!rawStep || typeof rawStep !== 'object') {
+      throw new Error(`Command step (${index + 1}) is invalid.`);
+    }
+
+    const command = rawStep.command;
+    if (typeof command !== 'string' || !this.toolRegistry.hasCommand(command)) {
+      throw new Error(`Unknown command: ${command}`);
+    }
+
+    const args = rawStep.arguments;
+    if (!Array.isArray(args) || !args.every((arg) => typeof arg === 'string')) {
+      throw new Error(`Step (${index + 1}) arguments must be an array of strings.`);
+    }
+
+    const reasoning = typeof rawStep.reasoning === 'string' ? rawStep.reasoning : '';
+    const outputs = Array.isArray(rawStep.outputs) ? rawStep.outputs : [];
+
+    const normalizedOutputs = outputs.map((item, outputIndex) =>
+      this.validateOutput(item, index, outputIndex, normalizedOutputDir)
+    );
+
+    const id = typeof rawStep.id === 'string' && rawStep.id.trim() ? rawStep.id.trim() : undefined;
+    const title = typeof rawStep.title === 'string' && rawStep.title.trim() ? rawStep.title.trim() : undefined;
+    const note = typeof rawStep.note === 'string' && rawStep.note.trim() ? rawStep.note.trim() : undefined;
+
+    return {
+      command,
+      arguments: args,
+      reasoning,
+      outputs: normalizedOutputs,
+      id,
+      title,
+      note
+    };
+  }
+
+  /**
+   * @param {any} rawOutput
+   * @param {number} stepIndex
+   * @param {number} outputIndex
+   * @param {string} normalizedOutputDir
+   * @returns {import('../shared/types.js').CommandOutputPlan}
+   */
+  validateOutput(rawOutput, stepIndex, outputIndex, normalizedOutputDir) {
+    if (!rawOutput || typeof rawOutput !== 'object') {
+      throw new Error(`Step (${stepIndex + 1}) outputs[${outputIndex}] is invalid.`);
+    }
+
+    const rawPath = typeof rawOutput.path === 'string' ? rawOutput.path.trim() : '';
+    if (!rawPath) {
+      throw new Error(`Step (${stepIndex + 1}) output path is missing.`);
+    }
+
+    const absolutePath = path.resolve(rawPath);
+    const relative = path.relative(normalizedOutputDir, absolutePath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error(`Output path lies outside of the output directory: ${rawOutput.path}`);
+    }
+
+    const description = typeof rawOutput.description === 'string' ? rawOutput.description : '';
+
+    return {
+      path: absolutePath,
+      description
+    };
+  }
 }
+

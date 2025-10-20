@@ -11,11 +11,10 @@ import { ResponseParser } from './ResponseParser.js';
 /** @typedef {import('../index.js').CommandPlan} CommandPlan */
 
 /**
- * OpenAI APIを用いてタスク計画を生成するプランナーです。
+ * Generates executable command plans with the OpenAI Responses API.
  */
 export class OpenAIPlanner {
   /**
-   * OpenAIクライアントとツール情報を受け取り、計画生成に必要なコンポーネントを初期化します。
    * @param {OpenAI} client
    * @param {ToolRegistry} toolRegistry
    * @param {{model?: string, promptBuilder?: PromptBuilder, planValidator?: PlanValidator}} [options]
@@ -29,7 +28,7 @@ export class OpenAIPlanner {
   }
 
   /**
-   * エージェントリクエストからプロンプトを構築し、OpenAIに問い合わせてコマンドプランを生成します。
+   * Plans a multi-step command workflow for the given request.
    * @param {AgentRequest} request
    * @param {{debug?: boolean, includeRawResponse?: boolean}} [options]
    * @returns {Promise<{plan: CommandPlan, rawPlan: any, debug?: Record<string, any>}>}
@@ -78,27 +77,29 @@ export class OpenAIPlanner {
     try {
       parsed = JSON.parse(responseText);
     } catch (error) {
-      throw new Error(`OpenAIレスポンスのJSON解析に失敗しました: ${error.message}`);
+      throw new Error(`Failed to parse OpenAI response as JSON: ${error.message}`);
     }
+
+    const normalized = this.normalizePlanStructure(parsed);
 
     const debug = options.debug
       ? {
-        model: this.model,
-        developerPrompt,
-        responseText,
-        parsed,
-        rawResponse: options.includeRawResponse ? safeSerialize(response) : undefined
-      }
+          model: this.model,
+          developerPrompt,
+          responseText,
+          parsed: normalized,
+          rawResponse: options.includeRawResponse ? safeSerialize(response) : undefined
+        }
       : undefined;
 
     try {
-      const plan = this.planValidator.validate(parsed, request.outputDir);
-      return { plan, rawPlan: parsed, debug };
+      const plan = this.planValidator.validate(normalized, request.outputDir);
+      return { plan, rawPlan: normalized, debug };
     } catch (error) {
       if (error && typeof error === 'object') {
         /** @type {Record<string, any>} */
         const errorObj = error;
-        errorObj.rawPlan = parsed;
+        errorObj.rawPlan = normalized;
         if (debug) {
           errorObj.debug = debug;
         }
@@ -109,7 +110,7 @@ export class OpenAIPlanner {
   }
 
   /**
-   * OpenAI Responses APIで求める返却JSONのスキーマを定義します。
+   * Builds a JSON schema describing the multi-step command plan.
    * @returns {OpenAI.Responses.ResponseFormatTextJSONSchemaConfig}
    */
   buildResponseFormat() {
@@ -120,41 +121,69 @@ export class OpenAIPlanner {
       schema: {
         type: 'object',
         additionalProperties: false,
-        required: ['command', 'arguments', 'reasoning', 'followUp', 'outputs'],
+        required: ['steps'],
         properties: {
-          command: {
+          overview: {
             type: 'string',
-            description: 'Command name to execute.',
-            enum: this.toolRegistry.listCommandIds()
-          },
-          arguments: {
-            type: 'array',
-            description: 'Ordered command arguments.',
-            items: {
-              type: 'string'
-            }
-          },
-          reasoning: {
-            type: 'string',
-            description: 'Why this command solves the request.'
+            description: 'High level summary of the approach.'
           },
           followUp: {
             type: 'string',
             description: 'Optional follow-up guidance for the operator.'
           },
-          outputs: {
+          steps: {
             type: 'array',
-            description: 'Planned output files.',
+            minItems: 1,
+            description: 'Ordered command steps to execute.',
             items: {
               type: 'object',
-              required: ['path', 'description'],
               additionalProperties: false,
+              required: ['command', 'arguments', 'reasoning', 'outputs'],
               properties: {
-                path: {
-                  type: 'string'
+                id: {
+                  type: 'string',
+                  description: 'Optional identifier for the step.'
                 },
-                description: {
-                  type: 'string'
+                title: {
+                  type: 'string',
+                  description: 'Short label for the step.'
+                },
+                note: {
+                  type: 'string',
+                  description: 'Additional explanation or caution.'
+                },
+                command: {
+                  type: 'string',
+                  description: 'Command name to execute.',
+                  enum: this.toolRegistry.listCommandIds()
+                },
+                arguments: {
+                  type: 'array',
+                  description: 'Ordered command arguments.',
+                  items: {
+                    type: 'string'
+                  }
+                },
+                reasoning: {
+                  type: 'string',
+                  description: 'Why this step is needed.'
+                },
+                outputs: {
+                  type: 'array',
+                  description: 'Planned output files.',
+                  items: {
+                    type: 'object',
+                    required: ['path', 'description'],
+                    additionalProperties: false,
+                    properties: {
+                      path: {
+                        type: 'string'
+                      },
+                      description: {
+                        type: 'string'
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -163,10 +192,56 @@ export class OpenAIPlanner {
       }
     };
   }
+
+  /**
+   * Normalises legacy single-command structures into the multi-step format.
+   * @param {any} value
+   * @returns {any}
+   */
+  normalizePlanStructure(value) {
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+
+    if (Array.isArray(value.steps)) {
+      return {
+        overview: typeof value.overview === 'string' ? value.overview : '',
+        followUp: typeof value.followUp === 'string' ? value.followUp : '',
+        steps: value.steps.map((step) => ({
+          command: step?.command,
+          arguments: Array.isArray(step?.arguments) ? [...step.arguments] : [],
+          reasoning: typeof step?.reasoning === 'string' ? step.reasoning : '',
+          outputs: Array.isArray(step?.outputs) ? [...step.outputs] : [],
+          id: typeof step?.id === 'string' ? step.id : undefined,
+          title: typeof step?.title === 'string' ? step.title : undefined,
+          note: typeof step?.note === 'string' ? step.note : undefined
+        }))
+      };
+    }
+
+    const legacyCommand = typeof value.command === 'string' ? value.command : 'none';
+    const legacyArguments = Array.isArray(value.arguments) ? [...value.arguments] : [];
+    const legacyOutputs = Array.isArray(value.outputs) ? [...value.outputs] : [];
+    const legacyReasoning = typeof value.reasoning === 'string' ? value.reasoning : '';
+    const legacyFollowUp = typeof value.followUp === 'string' ? value.followUp : '';
+
+    return {
+      overview: legacyReasoning,
+      followUp: legacyFollowUp,
+      steps: [
+        {
+          command: legacyCommand,
+          arguments: legacyArguments,
+          reasoning: legacyReasoning,
+          outputs: legacyOutputs
+        }
+      ]
+    };
+  }
 }
 
 /**
- * 循環参照などが含まれるレスポンスを安全にシリアライズします。
+ * Safely serialises arbitrary values into JSON-compatible structures.
  * @param {any} value
  * @returns {any}
  */

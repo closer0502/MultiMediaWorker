@@ -9,11 +9,40 @@ const STATUS_LABELS = {
 };
 
 /**
- * @typedef {Object} ClientCommandPlan
+ * @typedef {Object} ClientCommandOutput
+ * @property {string} path
+ * @property {string} description
+ */
+
+/**
+ * @typedef {Object} ClientCommandStep
  * @property {string} command
  * @property {string[]} arguments
  * @property {string} reasoning
- * @property {string} [followUp]
+ * @property {ClientCommandOutput[]} outputs
+ * @property {string|undefined} id
+ * @property {string|undefined} title
+ * @property {string|undefined} note
+ */
+
+/**
+ * @typedef {Object} ClientCommandPlan
+ * @property {ClientCommandStep[]} steps
+ * @property {string|undefined} overview
+ * @property {string|undefined} followUp
+ */
+
+/**
+ * @typedef {Object} ClientCommandStepResult
+ * @property {'executed'|'skipped'} status
+ * @property {string} command
+ * @property {string[]} arguments
+ * @property {string} reasoning
+ * @property {number|null} exitCode
+ * @property {boolean} timedOut
+ * @property {string} stdout
+ * @property {string} stderr
+ * @property {string|undefined} skipReason
  */
 
 /**
@@ -306,9 +335,11 @@ function ToolList({ tools }) {
 function ResultView({ entry }) {
   const outputList = entry?.result?.resolvedOutputs || [];
   const statusLabel = STATUS_LABELS[entry.status] || entry.status || 'Unknown';
-  const displayPlan = entry.plan ?? entry.rawPlan;
-  const reasoning = entry.plan?.reasoning ?? entry.rawPlan?.reasoning ?? '';
-  const followUp = entry.plan?.followUp ?? entry.rawPlan?.followUp ?? '';
+  const plan = normalizePlan(entry.plan ?? entry.rawPlan);
+  const followUp = plan?.followUp || '';
+  const overview = plan?.overview || '';
+  const planSteps = plan?.steps || [];
+  const stepResults = Array.isArray(entry?.result?.steps) ? entry.result.steps : [];
 
   return (
     <div className="result-view">
@@ -326,11 +357,12 @@ function ResultView({ entry }) {
       </div>
 
       <div className="result-section">
-        <h3>Command</h3>
-        {displayPlan ? (
+        <h3>Command Plan</h3>
+        {plan ? (
           <>
-            <code className="command-line">{buildCommandString(displayPlan)}</code>
-            {reasoning && <p className="note">{reasoning}</p>}
+            <code className="command-line">{buildPlanSummary(plan)}</code>
+            {overview && <p className="note">{overview}</p>}
+            <PlanStepList steps={planSteps} results={stepResults} />
           </>
         ) : (
           <p>Command plan is not available.</p>
@@ -451,6 +483,74 @@ function PhaseChecklist({ phases }) {
 }
 
 /**
+ * @param {{ steps: ClientCommandStep[], results: ClientCommandStepResult[] }} props
+ * @returns {JSX.Element|null}
+ */
+function PlanStepList({ steps, results }) {
+  if (!steps.length) {
+    return null;
+  }
+
+  return (
+    <ol className="plan-step-list">
+      {steps.map((step, index) => {
+        const stepResult = Array.isArray(results) ? results[index] : undefined;
+        const title = step.title || `Step ${index + 1}`;
+        const key = step.id || `${step.command || 'unknown'}-${index}`;
+
+        return (
+          <li key={key} className="plan-step-item">
+            <div className="plan-step-header">
+              <strong>{title}</strong>
+              <StepStatusBadge result={stepResult} />
+            </div>
+            <code className="command-line small">{formatStepCommand(step)}</code>
+            {step.reasoning && <p className="note">{step.reasoning}</p>}
+            {step.note && <p className="note">{step.note}</p>}
+            {step.outputs && step.outputs.length > 0 && (
+              <ul className="plan-step-outputs">
+                {step.outputs.map((output) => (
+                  <li key={`${output.path}-${output.description || 'output'}`}>
+                    <span>{output.description || 'Output'}:</span> <span>{output.path}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {stepResult?.status === 'skipped' && stepResult.skipReason && (
+              <p className="note">Skipped because {describeSkipReason(stepResult.skipReason)}</p>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * @param {{ result: ClientCommandStepResult|undefined }} props
+ * @returns {JSX.Element|null}
+ */
+function StepStatusBadge({ result }) {
+  if (!result) {
+    return null;
+  }
+
+  const statusLabel = result.status === 'executed' ? 'Executed' : 'Skipped';
+  const extras = [];
+  if (result.status === 'executed') {
+    if (result.exitCode !== null && result.exitCode !== undefined) {
+      extras.push(`exit ${result.exitCode}`);
+    }
+    if (result.timedOut) {
+      extras.push('timed out');
+    }
+  }
+
+  const text = extras.length ? `${statusLabel} (${extras.join(', ')})` : statusLabel;
+  return <span className={`chip step-status-${result.status}`}>{text}</span>;
+}
+
+/**
  * @param {{ files: Array<any> }} props
  * @returns {JSX.Element}
  */
@@ -510,6 +610,8 @@ function ProcessSummary({ result }) {
     return <p>Command has not been executed yet.</p>;
   }
 
+  const stepResults = Array.isArray(result.steps) ? result.steps : [];
+
   return (
     <div className="process-summary">
       <div className="process-row">
@@ -524,6 +626,41 @@ function ProcessSummary({ result }) {
         <span>Dry Run</span>
         <span>{result.dryRun ? 'yes' : 'no'}</span>
       </div>
+      {stepResults.length > 0 && (
+        <div className="process-steps">
+          <h4>Per-step Details</h4>
+          <ol className="process-step-list">
+            {stepResults.map((step, index) => {
+              const key = `${step.command || 'step'}-${index}`;
+              return (
+                <li key={key} className="process-step-item">
+                  <div className="process-row">
+                    <span>{`Step ${index + 1}`}</span>
+                    <span>{formatStepStatus(step)}</span>
+                  </div>
+                  <code className="command-line small">{formatStepCommand(step)}</code>
+                  {step.reasoning && <p className="note">{step.reasoning}</p>}
+                  {step.status === 'skipped' && step.skipReason && (
+                    <p className="note">Skipped because {describeSkipReason(step.skipReason)}</p>
+                  )}
+                  {step.status === 'executed' && (
+                    <>
+                      <details className="log-block">
+                        <summary>Standard Output</summary>
+                        <pre>{step.stdout || '(empty)'}</pre>
+                      </details>
+                      <details className="log-block">
+                        <summary>Standard Error</summary>
+                        <pre className={step.stderr ? 'log-error' : ''}>{step.stderr || '(empty)'}</pre>
+                      </details>
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
       <details className="log-block">
         <summary>Standard Output</summary>
         <pre>{result.stdout || '(empty)'}</pre>
@@ -590,7 +727,7 @@ function HistoryList({ entries }) {
           </div>
           <p className="history-task">{item.task}</p>
           <code className="command-line small">
-            {buildCommandString(item.plan ?? item.rawPlan) || '(no command)'}
+            {buildPlanSummary(item.plan ?? item.rawPlan) || '(no plan)'}
           </code>
         </li>
       ))}
@@ -599,15 +736,134 @@ function HistoryList({ entries }) {
 }
 
 /**
- * @param {{command?: string, arguments?: string[]}} plan
+ * @param {ClientCommandPlan|any} plan
  * @returns {string}
  */
-function buildCommandString(plan) {
-  if (!plan?.command) {
+function buildPlanSummary(plan) {
+  const normalized = normalizePlan(plan);
+  if (!normalized || !normalized.steps.length) {
     return '';
   }
-  const args = (plan.arguments || []).map(quoteArgument).join(' ');
-  return `${plan.command} ${args}`.trim();
+
+  return normalized.steps
+    .map((step, index) => `${index + 1}) ${formatStepCommand(step)}`)
+    .join('; ');
+}
+
+/**
+ * @param {ClientCommandPlan|any} plan
+ * @returns {ClientCommandPlan|null}
+ */
+function normalizePlan(plan) {
+  if (!plan || typeof plan !== 'object') {
+    return null;
+  }
+
+  if (Array.isArray(plan.steps)) {
+    return {
+      steps: plan.steps.map((step) => normalizePlanStep(step)),
+      overview: typeof plan.overview === 'string' ? plan.overview : '',
+      followUp: typeof plan.followUp === 'string' ? plan.followUp : ''
+    };
+  }
+
+  if (typeof plan.command === 'string') {
+    const legacyStep = normalizePlanStep(plan);
+    return {
+      steps: [legacyStep],
+      overview: typeof plan.reasoning === 'string' ? plan.reasoning : '',
+      followUp: typeof plan.followUp === 'string' ? plan.followUp : ''
+    };
+  }
+
+  return null;
+}
+
+/**
+ * @param {any} step
+ * @returns {ClientCommandStep}
+ */
+function normalizePlanStep(step) {
+  const command = typeof step?.command === 'string' ? step.command : '';
+  const args = Array.isArray(step?.arguments) ? step.arguments.filter((arg) => typeof arg === 'string') : [];
+  const outputs = Array.isArray(step?.outputs)
+    ? step.outputs
+        .map((output) => ({
+          path: typeof output?.path === 'string' ? output.path : '',
+          description: typeof output?.description === 'string' ? output.description : ''
+        }))
+        .filter((output) => output.path)
+    : [];
+
+  const id = typeof step?.id === 'string' && step.id.trim() ? step.id.trim() : undefined;
+  const title = typeof step?.title === 'string' && step.title.trim() ? step.title.trim() : undefined;
+  const note = typeof step?.note === 'string' && step.note.trim() ? step.note.trim() : undefined;
+
+  return {
+    command,
+    arguments: args,
+    reasoning: typeof step?.reasoning === 'string' ? step.reasoning : '',
+    outputs,
+    id,
+    title,
+    note
+  };
+}
+
+/**
+ * @param {{command?: string, arguments?: string[]}} step
+ * @returns {string}
+ */
+function formatStepCommand(step) {
+  if (!step?.command) {
+    return '';
+  }
+  const args = Array.isArray(step.arguments) ? step.arguments.map(quoteArgument).join(' ') : '';
+  return `${step.command} ${args}`.trim();
+}
+
+/**
+ * @param {ClientCommandStepResult} step
+ * @returns {string}
+ */
+function formatStepStatus(step) {
+  if (!step || !step.status) {
+    return 'Unknown';
+  }
+
+  if (step.status === 'executed') {
+    const parts = [];
+    if (step.exitCode !== null && step.exitCode !== undefined) {
+      parts.push(`exit ${step.exitCode}`);
+    }
+    if (step.timedOut) {
+      parts.push('timed out');
+    }
+    return parts.length ? `Executed (${parts.join(', ')})` : 'Executed';
+  }
+
+  if (step.status === 'skipped') {
+    return 'Skipped';
+  }
+
+  return step.status;
+}
+
+/**
+ * @param {string} reason
+ * @returns {string}
+ */
+function describeSkipReason(reason) {
+  switch (reason) {
+    case 'dry_run':
+      return 'dry run mode is enabled.';
+    case 'previous_step_failed':
+      return 'a previous step failed.';
+    case 'no_op_command':
+      return 'the command was set to "none".';
+    default:
+      return reason ? reason.replace(/_/g, ' ') : 'no additional details were provided.';
+  }
 }
 
 /**

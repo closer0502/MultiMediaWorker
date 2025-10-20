@@ -4,17 +4,18 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 /** @typedef {import('../index.js').CommandPlan} CommandPlan */
+/** @typedef {import('../index.js').CommandStepPlan} CommandStepPlan */
 /** @typedef {import('../index.js').CommandExecutionOptions} CommandExecutionOptions */
 /** @typedef {import('../index.js').CommandExecutionResult} CommandExecutionResult */
 /** @typedef {import('../index.js').CommandOutputPlan} CommandOutputPlan */
 /** @typedef {import('../index.js').DescribedOutput} DescribedOutput */
+/** @typedef {import('../index.js').CommandStepResult} CommandStepResult */
 
 /**
- * 検証済みのコマンドプランを実行して実行結果を取りまとめるクラスです。
+ * Executes command plans step by step and reports consolidated results.
  */
 export class CommandExecutor {
   /**
-   * タイムアウトなどの基本設定を受け取り初期化します。
    * @param {{timeoutMs?: number}} [options]
    */
   constructor(options = {}) {
@@ -22,7 +23,7 @@ export class CommandExecutor {
   }
 
   /**
-   * コマンドプランを実行し、標準出力・エラーなどの結果を返します。
+   * Runs every command step in the provided plan.
    * @param {CommandPlan} plan
    * @param {CommandExecutionOptions} [options]
    * @returns {Promise<CommandExecutionResult>}
@@ -32,35 +33,80 @@ export class CommandExecutor {
     const publicRoot = options.publicRoot ? path.resolve(options.publicRoot) : null;
     const dryRun = Boolean(options.dryRun);
 
-    await this.ensureOutputDirectories(plan.outputs);
+    const allOutputs = this.collectOutputs(plan.steps);
+    await this.ensureOutputDirectories(allOutputs);
 
-    const skipExecution = dryRun || plan.command === 'none';
+    const stepResults = [];
+    let aggregatedStdout = '';
+    let aggregatedStderr = '';
+    let lastExitCode = null;
+    let anyTimedOut = false;
+    let encounteredFailure = false;
 
-    if (skipExecution) {
-      return {
-        exitCode: null,
-        timedOut: false,
-        stdout: '',
-        stderr: '',
-        resolvedOutputs: await this.describeOutputs(plan.outputs, publicRoot),
-        dryRun: dryRun || plan.command === 'none'
-      };
+    for (let index = 0; index < plan.steps.length; index += 1) {
+      const step = plan.steps[index];
+      const skipReason = this.resolveSkipReason({
+        dryRun,
+        encounteredFailure,
+        command: step.command
+      });
+
+      if (skipReason) {
+        stepResults.push(this.createSkippedResult(step, skipReason));
+        continue;
+      }
+
+      const { exitCode, stdout, stderr, timedOut } = await this.spawnProcess(step.command, step.arguments, cwd);
+
+      const executedResult = this.createExecutedResult(step, exitCode, stdout, stderr, timedOut);
+      stepResults.push(executedResult);
+
+      lastExitCode = exitCode;
+      anyTimedOut = anyTimedOut || timedOut;
+
+      aggregatedStdout = this.appendSectionOutput(aggregatedStdout, index, step, stdout);
+      aggregatedStderr = this.appendSectionOutput(aggregatedStderr, index, step, stderr);
+
+      if (timedOut || (exitCode !== null && exitCode !== 0)) {
+        encounteredFailure = true;
+      }
     }
 
-    const { exitCode, stdout, stderr, timedOut } = await this.spawnProcess(plan.command, plan.arguments, cwd);
+    // Mark remaining steps as skipped if a failure occurred mid-way.
+    if (encounteredFailure) {
+      for (let index = 0; index < stepResults.length; index += 1) {
+        const result = stepResults[index];
+        if (result.status === 'skipped' && !result.skipReason) {
+          result.skipReason = 'previous_step_failed';
+        }
+      }
+    }
+
+    const resolvedOutputs = await this.describeOutputs(allOutputs, publicRoot);
+    const noExecutedSteps = stepResults.every((step) => step.status !== 'executed');
 
     return {
-      exitCode,
-      timedOut,
-      stdout,
-      stderr,
-      resolvedOutputs: await this.describeOutputs(plan.outputs, publicRoot),
-      dryRun: false
+      exitCode: lastExitCode,
+      timedOut: anyTimedOut,
+      stdout: aggregatedStdout,
+      stderr: aggregatedStderr,
+      resolvedOutputs,
+      dryRun: dryRun || noExecutedSteps,
+      steps: stepResults
     };
   }
 
   /**
-   * 出力予定のファイルが置かれるディレクトリを作成します。
+   * Collects every output description from the plan.
+   * @param {CommandStepPlan[]} steps
+   * @returns {CommandOutputPlan[]}
+   */
+  collectOutputs(steps) {
+    return steps.flatMap((step) => Array.isArray(step.outputs) ? step.outputs : []);
+  }
+
+  /**
+   * Ensures that every planned output directory exists.
    * @param {CommandOutputPlan[]} outputs
    * @returns {Promise<void>}
    */
@@ -70,7 +116,7 @@ export class CommandExecutor {
   }
 
   /**
-   * 出力ファイルの実在確認や公開パスを付加して詳細情報を組み立てます。
+   * Describes the current state of the planned output files.
    * @param {CommandOutputPlan[]} outputs
    * @param {string|null} publicRoot
    * @returns {Promise<DescribedOutput[]>}
@@ -105,7 +151,90 @@ export class CommandExecutor {
   }
 
   /**
-   * 子プロセスを起動して標準出力／エラーを収集します。
+   * Determines if the current step should be skipped and why.
+   * @param {{dryRun: boolean, encounteredFailure: boolean, command: string}} options
+   * @returns {string|undefined}
+   */
+  resolveSkipReason({ dryRun, encounteredFailure, command }) {
+    if (dryRun) {
+      return 'dry_run';
+    }
+    if (encounteredFailure) {
+      return 'previous_step_failed';
+    }
+    if (command === 'none') {
+      return 'no_op_command';
+    }
+    return undefined;
+  }
+
+  /**
+   * Creates a result object for a skipped step.
+   * @param {CommandStepPlan} step
+   * @param {string} skipReason
+   * @returns {CommandStepResult}
+   */
+  createSkippedResult(step, skipReason) {
+    return {
+      status: 'skipped',
+      command: step.command,
+      arguments: step.arguments,
+      reasoning: step.reasoning,
+      exitCode: null,
+      timedOut: false,
+      stdout: '',
+      stderr: '',
+      skipReason
+    };
+  }
+
+  /**
+   * Creates a result object for an executed step.
+   * @param {CommandStepPlan} step
+   * @param {number|null} exitCode
+   * @param {string} stdout
+   * @param {string} stderr
+   * @param {boolean} timedOut
+   * @returns {CommandStepResult}
+   */
+  createExecutedResult(step, exitCode, stdout, stderr, timedOut) {
+    return {
+      status: 'executed',
+      command: step.command,
+      arguments: step.arguments,
+      reasoning: step.reasoning,
+      exitCode,
+      timedOut,
+      stdout,
+      stderr
+    };
+  }
+
+  /**
+   * Appends a command section to aggregated output.
+   * @param {string} existing
+   * @param {number} index
+   * @param {CommandStepPlan} step
+   * @param {string} content
+   * @returns {string}
+   */
+  appendSectionOutput(existing, index, step, content) {
+    const hasContent = Boolean(content);
+    if (!hasContent) {
+      return existing;
+    }
+
+    const commandLine = [step.command, ...step.arguments].join(' ').trim();
+    const header = `[step ${index + 1}] ${commandLine}`.trim();
+    const block = `${header}\n${content}`.trimEnd();
+    if (!existing) {
+      return block;
+    }
+    return `${existing}\n${block}`;
+  }
+
+  /**
+   * Spawns a child process for the given command.
    * @param {string} command
    * @param {string[]} args
    * @param {string} cwd
@@ -161,3 +290,4 @@ export class CommandExecutor {
     });
   }
 }
+

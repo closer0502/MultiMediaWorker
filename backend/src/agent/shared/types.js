@@ -21,12 +21,21 @@
  */
 
 /**
- * @typedef {Object} CommandPlan
+ * @typedef {Object} CommandStepPlan
  * @property {'ffmpeg'|'magick'|'exiftool'|'none'} command
  * @property {string[]} arguments
  * @property {string} reasoning
- * @property {string} [followUp]
  * @property {CommandOutputPlan[]} outputs
+ * @property {string|undefined} id
+ * @property {string|undefined} title
+ * @property {string|undefined} note
+ */
+
+/**
+ * @typedef {Object} CommandPlan
+ * @property {CommandStepPlan[]} steps
+ * @property {string|undefined} overview
+ * @property {string|undefined} followUp
  */
 
 /**
@@ -48,6 +57,23 @@
  */
 
 /**
+ * @typedef {'executed'|'skipped'} CommandStepStatus
+ */
+
+/**
+ * @typedef {Object} CommandStepResult
+ * @property {CommandStepStatus} status
+ * @property {string} command
+ * @property {string[]} arguments
+ * @property {string} reasoning
+ * @property {number|null} exitCode
+ * @property {boolean} timedOut
+ * @property {string} stdout
+ * @property {string} stderr
+ * @property {string|undefined} skipReason
+ */
+
+/**
  * @typedef {Object} CommandExecutionResult
  * @property {number|null} exitCode
  * @property {boolean} timedOut
@@ -55,6 +81,7 @@
  * @property {string} stderr
  * @property {DescribedOutput[]} resolvedOutputs
  * @property {boolean|undefined} dryRun
+ * @property {CommandStepResult[]} steps
  */
 
 export {};
