@@ -5,8 +5,8 @@ import OpenAI from 'openai';
  * @param {string|undefined} apiKey
  * @returns {OpenAI}
  */
-export function createOpenAIClient(apiKey) {
-  return new OpenAI({
+export function createOpenAIClient(apiKey, OpenAIClass = OpenAI) {
+  return new OpenAIClass({
     apiKey: apiKey || process.env.OPENAI_API_KEY
   });
 }

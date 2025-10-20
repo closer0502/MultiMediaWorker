@@ -357,3 +357,12 @@ function getFirstQueryValue(value) {
   }
   return String(value);
 }
+
+export {
+  createSessionId,
+  createSafeFileName,
+  createRequestPhase,
+  parseBoolean,
+  parseDebugMode,
+  getFirstQueryValue
+};
