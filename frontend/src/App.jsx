@@ -4,8 +4,8 @@ import './styles.css';
 const INITIAL_HISTORY = [];
 
 const STATUS_LABELS = {
-  success: 'Success',
-  failed: 'Failed'
+  success: '成功',
+  failed: '失敗'
 };
 
 /**
@@ -65,7 +65,7 @@ export default function App() {
     fetch('/api/tools')
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error('Failed to fetch tool information.');
+          throw new Error('ツール情報の取得に失敗しました。');
         }
         const payload = await response.json();
         if (!cancelled) {
@@ -94,7 +94,7 @@ export default function App() {
     async (event) => {
       event.preventDefault();
       if (!task.trim()) {
-        setError('Please describe the task.');
+        setError('タスク内容を入力してください。');
         return;
       }
       setIsSubmitting(true);
@@ -132,7 +132,7 @@ export default function App() {
         const payload = await response.json().catch(() => null);
 
         if (!response.ok) {
-          const message = payload?.error || 'Failed to generate command.';
+          const message = payload?.error || '実行中に問題が発生しました。';
           setError(message);
           if (payload) {
             setHistory((prev) => [
@@ -162,7 +162,7 @@ export default function App() {
         }
 
         if (!payload) {
-          throw new Error('Received an empty response from the server.');
+          throw new Error('サーバーから空の応答が返されました。');
         }
 
         setHistory((prev) => [
@@ -204,23 +204,23 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1>MultiMedia Worker</h1>
-        <p>Ask in natural language and get ready-to-run ffmpeg / ImageMagick / ExifTool commands.</p>
+        <p>自然言語で指示すると、実行可能な ffmpeg / ImageMagick / ExifTool コマンドを生成します。</p>
       </header>
 
       <main className="content">
         <section className="panel">
-          <h2>Available Tools</h2>
+          <h2>利用可能なツール</h2>
           <ToolList tools={tools} />
         </section>
 
         <section className="panel">
-          <h2>Submit a Task</h2>
+          <h2>タスクを送信</h2>
           <form className="task-form" onSubmit={handleSubmit}>
             <label className="field">
-              <span>Goal / Instructions</span>
+              <span>目的 / 指示</span>
               <textarea
                 value={task}
-                placeholder='Example: "Resize 135329973_p1.png to 512x512 PNG."'
+                placeholder='例: 「135329973_p1.png を 512x512 の PNG にリサイズ」'
                 onChange={(event) => setTask(event.target.value)}
                 rows={5}
                 disabled={isSubmitting}
@@ -228,7 +228,7 @@ export default function App() {
             </label>
 
             <label className="field">
-              <span>Attach Files</span>
+              <span>ファイルを添付</span>
               <input
                 type="file"
                 multiple
@@ -242,7 +242,7 @@ export default function App() {
             )}
 
             <fieldset className="field options">
-              <legend>Options</legend>
+              <legend>オプション</legend>
               <label className="option">
                 <input
                   type="checkbox"
@@ -250,7 +250,7 @@ export default function App() {
                   onChange={(event) => setDryRun(event.target.checked)}
                   disabled={isSubmitting}
                 />
-                <span>Dry run (skip command execution)</span>
+                <span>ドライラン（コマンド実行をスキップ）</span>
               </label>
               <label className="option">
                 <input
@@ -265,7 +265,7 @@ export default function App() {
                   }}
                   disabled={isSubmitting}
                 />
-                <span>Return planning debug info</span>
+                <span>プラン生成のデバッグ情報を含める</span>
               </label>
               <label className="option nested">
                 <input
@@ -274,16 +274,16 @@ export default function App() {
                   onChange={(event) => setDebugVerbose(event.target.checked)}
                   disabled={isSubmitting || !debugEnabled}
                 />
-                <span>Include raw response (verbose)</span>
+                <span>生レスポンスを含める（詳細）</span>
               </label>
             </fieldset>
 
             <div className="form-actions">
               <button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Working…' : 'Generate Command'}
+                {isSubmitting ? '処理中…' : '送信する'}
               </button>
               <button type="button" onClick={resetForm} disabled={isSubmitting}>
-                Reset
+                リセット
               </button>
             </div>
           </form>
@@ -292,14 +292,14 @@ export default function App() {
 
         {latestEntry && (
           <section className="panel">
-            <h2>Latest Result</h2>
+            <h2>最新の結果</h2>
             <ResultView entry={latestEntry} />
           </section>
         )}
 
         {history.length > 1 && (
           <section className="panel">
-            <h2>History</h2>
+            <h2>履歴</h2>
             <HistoryList entries={history.slice(1)} />
           </section>
         )}
@@ -314,7 +314,7 @@ export default function App() {
  */
 function ToolList({ tools }) {
   if (!tools.length) {
-    return <p>Loading tool catalogue…</p>;
+    return <p>ツール一覧を読み込み中…</p>;
   }
   return (
     <ul className="tool-list">
@@ -334,7 +334,7 @@ function ToolList({ tools }) {
  */
 function ResultView({ entry }) {
   const outputList = entry?.result?.resolvedOutputs || [];
-  const statusLabel = STATUS_LABELS[entry.status] || entry.status || 'Unknown';
+  const statusLabel = STATUS_LABELS[entry.status] || entry.status || '不明';
   const plan = normalizePlan(entry.plan ?? entry.rawPlan);
   const followUp = plan?.followUp || '';
   const overview = plan?.overview || '';
@@ -345,19 +345,19 @@ function ResultView({ entry }) {
     <div className="result-view">
       <div className="result-header">
         <span className={`status-chip status-${entry.status}`}>{statusLabel}</span>
-        {entry.requestOptions?.dryRun && <span className="chip">Dry run</span>}
-        {entry.requestOptions?.debug && <span className="chip">Debug</span>}
+        {entry.requestOptions?.dryRun && <span className="chip">ドライラン</span>}
+        {entry.requestOptions?.debug && <span className="chip">デバッグ</span>}
       </div>
 
       {entry.error && <div className="error inline">{entry.error}</div>}
 
       <div className="result-section">
-        <h3>Workflow</h3>
+        <h3>ワークフロー</h3>
         <PhaseChecklist phases={entry.phases} />
       </div>
 
       <div className="result-section">
-        <h3>Command Plan</h3>
+        <h3>コマンドプラン</h3>
         {plan ? (
           <>
             <code className="command-line">{buildPlanSummary(plan)}</code>
@@ -365,22 +365,22 @@ function ResultView({ entry }) {
             <PlanStepList steps={planSteps} results={stepResults} />
           </>
         ) : (
-          <p>Command plan is not available.</p>
+          <p>コマンドプランが利用できません。</p>
         )}
       </div>
 
       {followUp && (
         <div className="result-section">
-          <h3>Follow-up Notes</h3>
+          <h3>追加メモ</h3>
           <p>{followUp}</p>
         </div>
       )}
 
       {entry.rawPlan && (
         <div className="result-section">
-          <h3>Planner Raw Output</h3>
+          <h3>プランナー出力（生データ）</h3>
           <details className="debug-block">
-            <summary>View JSON</summary>
+            <summary>JSON を表示</summary>
             <pre>{JSON.stringify(entry.rawPlan, null, 2)}</pre>
           </details>
         </div>
@@ -388,32 +388,32 @@ function ResultView({ entry }) {
 
       {entry.responseText && (
         <div className="result-section">
-          <h3>Raw Response Text</h3>
+          <h3>生レスポンス</h3>
           <details className="debug-block">
-            <summary>View Response</summary>
+            <summary>レスポンスを表示</summary>
             <pre>{entry.responseText}</pre>
           </details>
         </div>
       )}
 
       <div className="result-section">
-        <h3>Uploaded Files</h3>
+        <h3>アップロードしたファイル</h3>
         <UploadedFileList files={entry.uploadedFiles} />
       </div>
 
       <div className="result-section">
-        <h3>Outputs</h3>
+        <h3>出力ファイル</h3>
         <OutputList outputs={outputList} />
       </div>
 
       <div className="result-section">
-        <h3>Process Details</h3>
+        <h3>実行詳細</h3>
         <ProcessSummary result={entry.result} />
       </div>
 
       {entry.debug && (
         <div className="result-section">
-          <h3>Debug Details</h3>
+          <h3>デバッグ情報</h3>
           <DebugDetails debug={entry.debug} />
         </div>
       )}
@@ -427,7 +427,7 @@ function ResultView({ entry }) {
  */
 function PhaseChecklist({ phases }) {
   if (!phases || !phases.length) {
-    return <p>No phase information available.</p>;
+    return <p>フェーズ情報はありません。</p>;
   }
   return (
     <ol className="phase-list">
@@ -443,28 +443,28 @@ function PhaseChecklist({ phases }) {
             </div>
             {(phase.startedAt || phase.finishedAt) && (
               <div className="phase-timestamps">
-                {phase.startedAt && <span>start: {formatDateTime(phase.startedAt)}</span>}
-                {phase.finishedAt && <span>end: {formatDateTime(phase.finishedAt)}</span>}
+                {phase.startedAt && <span>開始: {formatDateTime(phase.startedAt)}</span>}
+                {phase.finishedAt && <span>終了: {formatDateTime(phase.finishedAt)}</span>}
               </div>
             )}
             {metaEntries.length > 0 && (
               <ul className="phase-meta">
                 {metaEntries.map(([key, value]) => (
                   <li key={key}>
-                    <strong>{key}</strong>
-                    <span>{String(value)}</span>
+                    <strong>{formatPhaseMetaKey(key)}</strong>
+                    <span>{formatPhaseMetaValue(value)}</span>
                   </li>
                 ))}
               </ul>
             )}
             {phase.error && (
               <div className="phase-error">
-                <strong>{phase.error.name || 'Error'}:</strong> {phase.error.message}
+                <strong>{phase.error.name || 'エラー'}:</strong> {phase.error.message}
               </div>
             )}
             {Array.isArray(phase.logs) && phase.logs.length > 0 && (
               <details className="log-block">
-                <summary>Logs ({phase.logs.length})</summary>
+                <summary>ログ ({phase.logs.length})</summary>
                 <ul className="phase-logs">
                   {phase.logs.map((log, index) => (
                     <li key={`${phase.id}-log-${index}`}>
@@ -495,7 +495,7 @@ function PlanStepList({ steps, results }) {
     <ol className="plan-step-list">
       {steps.map((step, index) => {
         const stepResult = Array.isArray(results) ? results[index] : undefined;
-        const title = step.title || `Step ${index + 1}`;
+        const title = step.title || `ステップ ${index + 1}`;
         const key = step.id || `${step.command || 'unknown'}-${index}`;
 
         return (
@@ -511,13 +511,13 @@ function PlanStepList({ steps, results }) {
               <ul className="plan-step-outputs">
                 {step.outputs.map((output) => (
                   <li key={`${output.path}-${output.description || 'output'}`}>
-                    <span>{output.description || 'Output'}:</span> <span>{output.path}</span>
+                    <span>{output.description || '出力'}:</span> <span>{output.path}</span>
                   </li>
                 ))}
               </ul>
             )}
             {stepResult?.status === 'skipped' && stepResult.skipReason && (
-              <p className="note">Skipped because {describeSkipReason(stepResult.skipReason)}</p>
+              <p className="note">スキップ理由: {describeSkipReason(stepResult.skipReason)}</p>
             )}
           </li>
         );
@@ -535,14 +535,14 @@ function StepStatusBadge({ result }) {
     return null;
   }
 
-  const statusLabel = result.status === 'executed' ? 'Executed' : 'Skipped';
+  const statusLabel = result.status === 'executed' ? '実行済み' : 'スキップ';
   const extras = [];
   if (result.status === 'executed') {
     if (result.exitCode !== null && result.exitCode !== undefined) {
-      extras.push(`exit ${result.exitCode}`);
+      extras.push(`終了コード ${result.exitCode}`);
     }
     if (result.timedOut) {
-      extras.push('timed out');
+      extras.push('タイムアウト');
     }
   }
 
@@ -556,7 +556,7 @@ function StepStatusBadge({ result }) {
  */
 function UploadedFileList({ files }) {
   if (!files || !files.length) {
-    return <p>No files were uploaded.</p>;
+    return <p>アップロードされたファイルはありません。</p>;
   }
   return (
     <ul className="uploaded-files">
@@ -576,22 +576,22 @@ function UploadedFileList({ files }) {
  */
 function OutputList({ outputs }) {
   if (!outputs.length) {
-    return <p>No outputs were declared.</p>;
+    return <p>出力ファイルはありません。</p>;
   }
   return (
     <ul className="output-list">
       {outputs.map((item) => (
         <li key={item.path}>
           <div className="output-path">
-            <strong>{item.description || 'File'}</strong>
+            <strong>{item.description || 'ファイル'}</strong>
             <span>{item.absolutePath || item.path}</span>
           </div>
           <div className="output-meta">
-            <span>{item.exists ? 'Ready' : 'Pending'}</span>
+            <span>{item.exists ? '完了' : '未作成'}</span>
             {item.size != null && <span>{formatFileSize(item.size)}</span>}
             {item.publicPath && (
               <a href={`/files/${item.publicPath}`} target="_blank" rel="noreferrer">
-                Open
+                開く
               </a>
             )}
           </div>
@@ -607,7 +607,7 @@ function OutputList({ outputs }) {
  */
 function ProcessSummary({ result }) {
   if (!result) {
-    return <p>Command has not been executed yet.</p>;
+    return <p>コマンドはまだ実行されていません。</p>;
   }
 
   const stepResults = Array.isArray(result.steps) ? result.steps : [];
@@ -615,43 +615,43 @@ function ProcessSummary({ result }) {
   return (
     <div className="process-summary">
       <div className="process-row">
-        <span>Exit Code</span>
-        <span>{result.exitCode === null ? 'not run' : result.exitCode}</span>
+        <span>終了コード</span>
+        <span>{result.exitCode === null ? '未実行' : result.exitCode}</span>
       </div>
       <div className="process-row">
-        <span>Timed Out</span>
-        <span>{result.timedOut ? 'yes' : 'no'}</span>
+        <span>タイムアウト</span>
+        <span>{result.timedOut ? 'はい' : 'いいえ'}</span>
       </div>
       <div className="process-row">
-        <span>Dry Run</span>
-        <span>{result.dryRun ? 'yes' : 'no'}</span>
+        <span>ドライラン</span>
+        <span>{result.dryRun ? 'はい' : 'いいえ'}</span>
       </div>
       {stepResults.length > 0 && (
         <div className="process-steps">
-          <h4>Per-step Details</h4>
+          <h4>ステップ別の詳細</h4>
           <ol className="process-step-list">
             {stepResults.map((step, index) => {
               const key = `${step.command || 'step'}-${index}`;
               return (
                 <li key={key} className="process-step-item">
                   <div className="process-row">
-                    <span>{`Step ${index + 1}`}</span>
+                    <span>{`ステップ ${index + 1}`}</span>
                     <span>{formatStepStatus(step)}</span>
                   </div>
                   <code className="command-line small">{formatStepCommand(step)}</code>
                   {step.reasoning && <p className="note">{step.reasoning}</p>}
                   {step.status === 'skipped' && step.skipReason && (
-                    <p className="note">Skipped because {describeSkipReason(step.skipReason)}</p>
+                    <p className="note">スキップ理由: {describeSkipReason(step.skipReason)}</p>
                   )}
                   {step.status === 'executed' && (
                     <>
                       <details className="log-block">
-                        <summary>Standard Output</summary>
-                        <pre>{step.stdout || '(empty)'}</pre>
+                        <summary>標準出力</summary>
+                        <pre>{step.stdout || '（空）'}</pre>
                       </details>
                       <details className="log-block">
-                        <summary>Standard Error</summary>
-                        <pre className={step.stderr ? 'log-error' : ''}>{step.stderr || '(empty)'}</pre>
+                        <summary>標準エラー</summary>
+                        <pre className={step.stderr ? 'log-error' : ''}>{step.stderr || '（空）'}</pre>
                       </details>
                     </>
                   )}
@@ -662,12 +662,12 @@ function ProcessSummary({ result }) {
         </div>
       )}
       <details className="log-block">
-        <summary>Standard Output</summary>
-        <pre>{result.stdout || '(empty)'}</pre>
+        <summary>標準出力</summary>
+        <pre>{result.stdout || '（空）'}</pre>
       </details>
       <details className="log-block">
-        <summary>Standard Error</summary>
-        <pre className={result.stderr ? 'log-error' : ''}>{result.stderr || '(empty)'}</pre>
+        <summary>標準エラー</summary>
+        <pre className={result.stderr ? 'log-error' : ''}>{result.stderr || '（空）'}</pre>
       </details>
     </div>
   );
@@ -684,7 +684,7 @@ function DebugDetails({ debug }) {
   const printable = Object.entries(debug).filter(([, value]) => value !== undefined && value !== null);
 
   if (!printable.length) {
-    return <p>No debug information was returned.</p>;
+    return <p>デバッグ情報は返されませんでした。</p>;
   }
 
   return (
@@ -715,7 +715,7 @@ function DebugDetails({ debug }) {
  */
 function HistoryList({ entries }) {
   if (!entries.length) {
-    return <p>No previous runs.</p>;
+    return <p>過去の実行はありません。</p>;
   }
   return (
     <ul className="history-list">
@@ -727,7 +727,7 @@ function HistoryList({ entries }) {
           </div>
           <p className="history-task">{item.task}</p>
           <code className="command-line small">
-            {buildPlanSummary(item.plan ?? item.rawPlan) || '(no plan)'}
+            {buildPlanSummary(item.plan ?? item.rawPlan) || '（プランなし）'}
           </code>
         </li>
       ))}
@@ -746,8 +746,8 @@ function buildPlanSummary(plan) {
   }
 
   return normalized.steps
-    .map((step, index) => `${index + 1}) ${formatStepCommand(step)}`)
-    .join('; ');
+    .map((step, index) => `${index + 1}）${formatStepCommand(step)}`)
+    .join(' / ');
 }
 
 /**
@@ -828,22 +828,22 @@ function formatStepCommand(step) {
  */
 function formatStepStatus(step) {
   if (!step || !step.status) {
-    return 'Unknown';
+    return '不明';
   }
 
   if (step.status === 'executed') {
     const parts = [];
     if (step.exitCode !== null && step.exitCode !== undefined) {
-      parts.push(`exit ${step.exitCode}`);
+      parts.push(`終了コード ${step.exitCode}`);
     }
     if (step.timedOut) {
-      parts.push('timed out');
+      parts.push('タイムアウト');
     }
-    return parts.length ? `Executed (${parts.join(', ')})` : 'Executed';
+    return parts.length ? `実行済み（${parts.join(' / ')}）` : '実行済み';
   }
 
   if (step.status === 'skipped') {
-    return 'Skipped';
+    return 'スキップ';
   }
 
   return step.status;
@@ -856,13 +856,13 @@ function formatStepStatus(step) {
 function describeSkipReason(reason) {
   switch (reason) {
     case 'dry_run':
-      return 'dry run mode is enabled.';
+      return 'ドライランモードが有効です。';
     case 'previous_step_failed':
-      return 'a previous step failed.';
+      return '前のステップが失敗しました。';
     case 'no_op_command':
-      return 'the command was set to "none".';
+      return 'コマンドが "none" に設定されています。';
     default:
-      return reason ? reason.replace(/_/g, ' ') : 'no additional details were provided.';
+      return reason ? reason.replace(/_/g, ' ') : '追加情報はありません。';
   }
 }
 
@@ -885,10 +885,10 @@ function FilePreviewList({ files, onClear, disabled }) {
   return (
     <div className="file-preview">
       <div className="file-preview-header">
-        <strong>Selected files ({files.length})</strong>
+        <strong>選択したファイル（{files.length}）</strong>
         <span>{formatFileSize(totalSize)}</span>
         <button type="button" onClick={onClear} disabled={disabled}>
-          Clear
+          クリア
         </button>
       </div>
       <ul>
@@ -937,18 +937,41 @@ function quoteArgument(argument) {
 
 function statusLabel(status) {
   if (!status) {
-    return 'Pending';
+    return '保留';
   }
   if (STATUS_LABELS[status]) {
     return STATUS_LABELS[status];
   }
   if (status === 'in_progress') {
-    return 'In Progress';
+    return '進行中';
   }
   if (status === 'pending') {
-    return 'Pending';
+    return '保留';
   }
   return status;
+}
+
+function formatPhaseMetaKey(key) {
+  const mapping = {
+    taskPreview: 'タスク概要',
+    fileCount: 'ファイル数',
+    dryRun: 'ドライラン',
+    debug: 'デバッグ',
+    command: 'コマンド',
+    commands: 'コマンド',
+    timedOut: 'タイムアウト',
+    exitCode: '終了コード',
+    steps: 'ステップ数',
+    outputs: '出力数'
+  };
+  return mapping[key] || key;
+}
+
+function formatPhaseMetaValue(value) {
+  if (typeof value === 'boolean') {
+    return value ? 'はい' : 'いいえ';
+  }
+  return String(value);
 }
 
 function formatDateTime(value) {

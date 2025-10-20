@@ -1,19 +1,19 @@
 export const DEFAULT_TOOL_DEFINITIONS = {
   ffmpeg: {
     title: 'FFmpeg',
-    description: 'Use for video/audio transcoding and image sequence tasks.'
+    description: '動画・音声の変換や画像シーケンス処理に使用します。'
   },
   magick: {
     title: 'ImageMagick',
-    description: 'Use for image conversion, resizing, and compositing workflows.'
+    description: '画像の変換・リサイズ・合成処理に使用します。'
   },
   exiftool: {
     title: 'ExifTool',
-    description: 'Use for reading or editing media metadata.'
+    description: 'メタデータの読み取り・編集に使用します。'
   },
   none: {
-    title: 'No command',
-    description: 'Select when the task cannot be solved with the available tools.'
+    title: '実行しない',
+    description: '利用可能なツールで対応できない場合に選択します。'
   }
 };
 

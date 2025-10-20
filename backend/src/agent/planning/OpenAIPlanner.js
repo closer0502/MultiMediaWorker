@@ -123,14 +123,6 @@ export class OpenAIPlanner {
         additionalProperties: false,
         required: ['steps'],
         properties: {
-          overview: {
-            type: 'string',
-            description: 'High level summary of the approach.'
-          },
-          followUp: {
-            type: 'string',
-            description: 'Optional follow-up guidance for the operator.'
-          },
           steps: {
             type: 'array',
             minItems: 1,
@@ -140,18 +132,6 @@ export class OpenAIPlanner {
               additionalProperties: false,
               required: ['command', 'arguments', 'reasoning', 'outputs'],
               properties: {
-                id: {
-                  type: 'string',
-                  description: 'Optional identifier for the step.'
-                },
-                title: {
-                  type: 'string',
-                  description: 'Short label for the step.'
-                },
-                note: {
-                  type: 'string',
-                  description: 'Additional explanation or caution.'
-                },
                 command: {
                   type: 'string',
                   description: 'Command name to execute.',
@@ -186,7 +166,31 @@ export class OpenAIPlanner {
                   }
                 }
               }
+            },
+            optionalProperties: {
+              id: {
+                type: 'string',
+                description: 'Optional identifier for the step.'
+              },
+              title: {
+                type: 'string',
+                description: 'Short label for the step.'
+              },
+              note: {
+                type: 'string',
+                description: 'Additional explanation or caution.'
+              }
             }
+          }
+        },
+        optionalProperties: {
+          overview: {
+            type: 'string',
+            description: 'High level summary of the approach.'
+          },
+          followUp: {
+            type: 'string',
+            description: 'Optional follow-up guidance for the operator.'
           }
         }
       }
