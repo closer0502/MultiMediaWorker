@@ -454,8 +454,7 @@ button[type='button'] {
 
 .debug-block pre {
   margin: 0.5rem 0 0;
-  max-height: 240px;
-  overflow: auto;
+  overflow: visible;
 }
 
 .history-row {
