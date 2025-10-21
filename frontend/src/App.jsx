@@ -557,7 +557,7 @@ function OutputList({ outputs }) {
               <span>{item.exists ? '存在' : '未作成'}</span>
               {item.size != null && <span>{formatFileSize(item.size)}</span>}
               {href && (
-                <a href={href} download={downloadName} rel="noreferrer">
+                <a className="button-link" href={href} download={downloadName} rel="noreferrer">
                   ダウンロード
                 </a>
               )}

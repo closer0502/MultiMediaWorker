@@ -103,6 +103,35 @@ body {
   height: 1.1rem;
 }
 
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 1.2rem;
+  border-radius: 8px;
+  background: #238636;
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+  width: fit-content;
+}
+
+.button-link:hover {
+  background: #2ea043;
+  text-decoration: none;
+}
+
+.button-link:active {
+  transform: translateY(1px);
+}
+
+.button-link:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.6);
+  outline-offset: 2px;
+}
+
 button {
   padding: 0.6rem 1.2rem;
   border: none;
@@ -330,7 +359,7 @@ video.output-preview-media {
   font-size: 0.9rem;
 }
 
-.output-meta a {
+.output-meta a:not(.button-link) {
   color: #58a6ff;
 }
 
