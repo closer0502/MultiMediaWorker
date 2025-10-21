@@ -10,7 +10,6 @@
 
 2. **初期状態のセットアップ**  
    - `App.jsx` (`frontend/src/App.jsx`) 内部の `useState` でフォームや履歴、ツールリストなどの状態を用意。  
-   - `useEffect` がマウント時に `/api/tools` をフェッチして利用可能コマンド一覧を取得し、`tools` ステートへ格納。
 
 3. **ユーザー入力の収集**  
    - タスク入力フィールドとファイル選択 (`<input type="file" multiple />`) を `App` が保持。  
@@ -58,7 +57,6 @@
 ```
 main.jsx
  └─ <App />
-     ├─ useEffect(fetch /api/tools)
      ├─ handleSubmit(form submission)
      │   ├─ fetch('/api/tasks', FormData)
      │   ├─ setHistory([...])

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import './styles.css';
 
 const INITIAL_HISTORY = [];
@@ -55,32 +55,10 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [history, setHistory] = useState(INITIAL_HISTORY);
-  const [tools, setTools] = useState([]);
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugVerbose, setDebugVerbose] = useState(false);
   const [dryRun, setDryRun] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/tools')
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error('ツール情報の取得に失敗しました。');
-        }
-        const payload = await response.json();
-        if (!cancelled) {
-          setTools(Array.isArray(payload.tools) ? payload.tools : []);
-        }
-      })
-      .catch((fetchError) => {
-        if (!cancelled) {
-          setError(fetchError.message);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const resetForm = useCallback(() => {
     setTask('');
@@ -209,11 +187,6 @@ export default function App() {
 
       <main className="content">
         <section className="panel">
-          <h2>利用可能なツール</h2>
-          <ToolList tools={tools} />
-        </section>
-
-        <section className="panel">
           <h2>タスクを送信</h2>
           <form className="task-form" onSubmit={handleSubmit}>
             <label className="field">
@@ -308,25 +281,6 @@ export default function App() {
   );
 }
 
-/**
- * @param {{tools: Array<{id: string, title: string, description: string}>}} props
- * @returns {JSX.Element}
- */
-function ToolList({ tools }) {
-  if (!tools.length) {
-    return <p>ツール一覧を読み込み中…</p>;
-  }
-  return (
-    <ul className="tool-list">
-      {tools.map((tool) => (
-        <li key={tool.id}>
-          <strong>{tool.title}</strong>
-          <span>{tool.description}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /**
  * @param {{ entry: any }} props

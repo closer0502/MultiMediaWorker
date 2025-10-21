@@ -175,7 +175,6 @@ button[type='button'] {
   margin-left: 0.5rem;
 }
 
-.tool-list,
 .output-list,
 .history-list,
 .phase-list,
@@ -188,7 +187,6 @@ button[type='button'] {
   gap: 1rem;
 }
 
-.tool-list li,
 .output-list li,
 .history-list li,
 .phase-list li,
@@ -196,14 +194,6 @@ button[type='button'] {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-}
-
-.tool-list strong {
-  font-size: 1.05rem;
-}
-
-.tool-list span {
-  color: #9eaec5;
 }
 
 .file-preview {

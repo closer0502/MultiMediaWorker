@@ -73,8 +73,6 @@ npm run preview:client
 
 ## HTTP API
 
-- `GET /api/tools`  
-  利用可能なツール一覧を返します。
 
 - `POST /api/tasks` (`multipart/form-data`)  
   フィールド:
