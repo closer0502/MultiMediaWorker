@@ -214,7 +214,7 @@ export default function App() {
   );
 
   const latestEntry = isSubmitting ? null : (history[0] || null);
-  const latestOutputsEntry = history[0] || null;
+  const latestOutputsEntry = isSubmitting ? null : (history[0] || null);
   const latestOutputs = latestOutputsEntry?.result?.resolvedOutputs || [];
   const progressPercent = useMemo(() => {
     if (!isSubmitting) {
@@ -340,7 +340,13 @@ export default function App() {
 
         <section className="panel">
           <h2>生成物</h2>
-          <OutputList outputs={latestOutputs} />
+          {isSubmitting ? (
+            <p className="note">最新の生成結果が整い次第ここに表示されます。</p>
+          ) : latestOutputs.length > 0 ? (
+            <OutputList outputs={latestOutputs} />
+          ) : (
+            <p className="note">まだ表示できる生成物がありません。</p>
+          )}
         </section>
 
         {latestEntry && (
