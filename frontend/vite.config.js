@@ -22,7 +22,10 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://localhost:3001',
-      '/files': 'http://localhost:3001/files'
+      '/files': {
+        target: 'http://localhost:3001',
+        changeOrigin: true
+      }
     }
   },
   preview: {

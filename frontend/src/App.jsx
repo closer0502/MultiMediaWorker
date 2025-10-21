@@ -176,6 +176,8 @@ export default function App() {
   );
 
   const latestEntry = isSubmitting ? null : (history[0] || null);
+  const latestOutputsEntry = history[0] || null;
+  const latestOutputs = latestOutputsEntry?.result?.resolvedOutputs || [];
 
   return (
     <div className="app">
@@ -260,6 +262,11 @@ export default function App() {
             </div>
           </form>
           {error && <div className="error">{error}</div>}
+        </section>
+
+        <section className="panel">
+          <h2>生成物</h2>
+          <OutputList outputs={latestOutputs} />
         </section>
 
         {latestEntry && (
@@ -529,27 +536,31 @@ function UploadedFileList({ files }) {
  */
 function OutputList({ outputs }) {
   if (!outputs.length) {
-    return <p>出力ファイルはありません。</p>;
+    return <p>生成ファイルはありません。</p>;
   }
   return (
     <ul className="output-list">
-      {outputs.map((item) => (
-        <li key={item.path}>
-          <div className="output-path">
-            <strong>{item.description || 'ファイル'}</strong>
-            <span>{item.absolutePath || item.path}</span>
-          </div>
-          <div className="output-meta">
-            <span>{item.exists ? '完了' : '未作成'}</span>
-            {item.size != null && <span>{formatFileSize(item.size)}</span>}
-            {item.publicPath && (
-              <a href={`/files/${item.publicPath}`} target="_blank" rel="noreferrer">
-                開く
-              </a>
-            )}
-          </div>
-        </li>
-      ))}
+      {outputs.map((item) => {
+        const href = resolvePublicHref(item.publicPath);
+        const downloadName = deriveDownloadName(item);
+        return (
+          <li key={item.path}>
+            <div className="output-path">
+              <strong>{item.description || 'ファイル'}</strong>
+              <span>{item.absolutePath || item.path}</span>
+            </div>
+            <div className="output-meta">
+              <span>{item.exists ? '存在' : '未作成'}</span>
+              {item.size != null && <span>{formatFileSize(item.size)}</span>}
+              {href && (
+                <a href={href} download={downloadName} rel="noreferrer">
+                  ダウンロード
+                </a>
+              )}
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -936,4 +947,40 @@ function formatDateTime(value) {
     return value;
   }
   return date.toLocaleString();
+}
+
+function deriveDownloadName(item) {
+  if (!item) {
+    return undefined;
+  }
+  const source = item.publicPath || item.absolutePath || item.path;
+  if (!source) {
+    return undefined;
+  }
+  const parts = String(source).replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : undefined;
+}
+
+function resolvePublicHref(publicPath) {
+  if (!publicPath) {
+    return '';
+  }
+  const normalized = String(publicPath).trim();
+  if (!normalized) {
+    return '';
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(normalized)) {
+    return normalized;
+  }
+  const cleaned = normalized.replace(/\\/g, '/').replace(/^\.\//, '');
+  if (cleaned.startsWith('/files/')) {
+    return cleaned;
+  }
+  if (cleaned.startsWith('/')) {
+    return cleaned;
+  }
+  if (cleaned.startsWith('files/')) {
+    return `/${cleaned}`;
+  }
+  return `/files/${cleaned}`;
 }
