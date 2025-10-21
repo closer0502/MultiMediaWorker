@@ -65,6 +65,10 @@ export default function App() {
     setSelectedFiles([]);
   }, []);
 
+  const clearTaskInput = useCallback(() => {
+    setTask('');
+  }, []);
+
   /**
    * @param {React.FormEvent<HTMLFormElement>} event
    */
@@ -166,14 +170,14 @@ export default function App() {
           ...prev
         ]);
 
-        resetForm();
+        clearTaskInput();
       } catch (submitError) {
         setError(submitError.message);
       } finally {
         setIsSubmitting(false);
       }
     },
-    [task, selectedFiles, debugEnabled, debugVerbose, dryRun, resetForm]
+    [task, selectedFiles, debugEnabled, debugVerbose, dryRun, clearTaskInput]
   );
 
   const latestEntry = isSubmitting ? null : (history[0] || null);
