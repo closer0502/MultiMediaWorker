@@ -17,4 +17,4 @@ export const DEFAULT_TOOL_DEFINITIONS = {
   }
 };
 
-export const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-5';
+export const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-5-nano';
