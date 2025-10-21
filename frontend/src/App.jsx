@@ -176,7 +176,7 @@ export default function App() {
     [task, selectedFiles, debugEnabled, debugVerbose, dryRun, resetForm]
   );
 
-  const latestEntry = history[0] || null;
+  const latestEntry = isSubmitting ? null : (history[0] || null);
 
   return (
     <div className="app">
