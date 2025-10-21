@@ -543,6 +543,10 @@ function OutputList({ outputs }) {
       {outputs.map((item) => {
         const href = resolvePublicHref(item.publicPath);
         const downloadName = deriveDownloadName(item);
+        const previewElement =
+          href && item.exists
+            ? renderOutputPreview(href, { filename: downloadName, description: item.description })
+            : null;
         return (
           <li key={item.path}>
             <div className="output-path">
@@ -558,6 +562,7 @@ function OutputList({ outputs }) {
                 </a>
               )}
             </div>
+            {previewElement && <div className="output-preview">{previewElement}</div>}
           </li>
         );
       })}
@@ -983,4 +988,51 @@ function resolvePublicHref(publicPath) {
     return `/${cleaned}`;
   }
   return `/files/${cleaned}`;
+}
+
+const IMAGE_PREVIEW_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff']);
+const AUDIO_PREVIEW_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac']);
+const VIDEO_PREVIEW_EXTENSIONS = new Set(['mp4', 'mov', 'webm', 'm4v', 'mkv']);
+
+function renderOutputPreview(href, { filename, description }) {
+  const previewType = determinePreviewType(filename);
+  if (previewType === 'image') {
+    return <img src={href} alt={description || filename || '生成物プレビュー'} className="output-preview-media" />;
+  }
+  if (previewType === 'audio') {
+    return <audio controls preload="metadata" src={href} className="output-preview-media" />;
+  }
+  if (previewType === 'video') {
+    return <video controls preload="metadata" src={href} className="output-preview-media" />;
+  }
+  return null;
+}
+
+function determinePreviewType(filename) {
+  const extension = extractFileExtension(filename);
+  if (!extension) {
+    return null;
+  }
+  if (IMAGE_PREVIEW_EXTENSIONS.has(extension)) {
+    return 'image';
+  }
+  if (AUDIO_PREVIEW_EXTENSIONS.has(extension)) {
+    return 'audio';
+  }
+  if (VIDEO_PREVIEW_EXTENSIONS.has(extension)) {
+    return 'video';
+  }
+  return null;
+}
+
+function extractFileExtension(filename) {
+  if (!filename) {
+    return '';
+  }
+  const withoutQuery = String(filename).split('?')[0].split('#')[0];
+  const lastDot = withoutQuery.lastIndexOf('.');
+  if (lastDot === -1) {
+    return '';
+  }
+  return withoutQuery.slice(lastDot + 1).toLowerCase();
 }

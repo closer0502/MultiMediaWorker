@@ -196,6 +196,27 @@ button[type='button'] {
   gap: 0.3rem;
 }
 
+.output-preview {
+  margin-top: 0.5rem;
+}
+
+.output-preview-media {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 6px;
+  background: #0d1117;
+}
+
+img.output-preview-media {
+  display: block;
+  max-height: 320px;
+  object-fit: contain;
+}
+
+video.output-preview-media {
+  max-height: 360px;
+}
+
 .file-preview {
   border: 1px dashed rgba(99, 110, 123, 0.4);
   border-radius: 8px;
