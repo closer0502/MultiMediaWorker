@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './styles.css';
 
 const INITIAL_HISTORY = [];
@@ -7,6 +7,27 @@ const STATUS_LABELS = {
   success: '成功',
   failed: '失敗'
 };
+
+const PROGRESS_STEPS = [
+  {
+    title: 'ご依頼を確認しています',
+    description: '入力いただいた内容を丁寧に読み取っています。'
+  },
+  {
+    title: '手順を準備しています',
+    description: '最適な進め方をAIが組み立てています。'
+  },
+  {
+    title: 'ツールを動かしています',
+    description: '必要なコマンドを実行し、処理を進めています。'
+  },
+  {
+    title: '仕上がりを整えています',
+    description: '結果をまとめてお届けできる形にしています。'
+  }
+];
+
+const PROGRESS_ROTATION_MS = 2400;
 
 /**
  * @typedef {Object} ClientCommandOutput
@@ -58,7 +79,24 @@ export default function App() {
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugVerbose, setDebugVerbose] = useState(false);
   const [dryRun, setDryRun] = useState(false);
+  const [progressStage, setProgressStage] = useState(0);
 
+  useEffect(() => {
+    if (!isSubmitting) {
+      setProgressStage(0);
+      return;
+    }
+    setProgressStage(0);
+    const timer = setInterval(() => {
+      setProgressStage((prev) => {
+        if (prev >= PROGRESS_STEPS.length - 1) {
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, PROGRESS_ROTATION_MS);
+    return () => clearInterval(timer);
+  }, [isSubmitting]);
 
   const resetForm = useCallback(() => {
     setTask('');
@@ -178,6 +216,13 @@ export default function App() {
   const latestEntry = isSubmitting ? null : (history[0] || null);
   const latestOutputsEntry = history[0] || null;
   const latestOutputs = latestOutputsEntry?.result?.resolvedOutputs || [];
+  const progressPercent = useMemo(() => {
+    if (!isSubmitting) {
+      return 0;
+    }
+    const currentStep = Math.min(progressStage + 1, PROGRESS_STEPS.length);
+    return Math.min(100, Math.round((currentStep / PROGRESS_STEPS.length) * 100));
+  }, [progressStage, isSubmitting]);
 
   return (
     <div className="app">
@@ -263,6 +308,35 @@ export default function App() {
           </form>
           {error && <div className="error">{error}</div>}
         </section>
+
+        {isSubmitting && (
+          <section className="panel progress-panel">
+            <h2>ただいま処理しています</h2>
+            <p className="progress-lead">仕上がりまで少々お待ちください。</p>
+            <div className="progress-bar">
+              <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }} />
+            </div>
+            <ul className="progress-steps">
+              {PROGRESS_STEPS.map((step, index) => {
+                let statusClass = '';
+                if (index === progressStage) {
+                  statusClass = 'is-active';
+                } else if (index < progressStage) {
+                  statusClass = 'is-complete';
+                }
+                return (
+                  <li key={step.title} className={`progress-step ${statusClass}`}>
+                    <span className="progress-step-index">{index + 1}</span>
+                    <div className="progress-step-body">
+                      <strong>{step.title}</strong>
+                      <span>{step.description}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         <section className="panel">
           <h2>生成物</h2>
