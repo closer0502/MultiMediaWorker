@@ -82,9 +82,29 @@ body {
   gap: 0.5rem;
 }
 
-.field.options legend {
-  padding: 0 0.25rem;
+.field.options.debug-options {
+  gap: 0.75rem;
+}
+
+.debug-options-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
   font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.debug-options-header input {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.debug-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .option {

@@ -77,7 +77,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [history, setHistory] = useState(INITIAL_HISTORY);
   const [debugEnabled, setDebugEnabled] = useState(false);
-  const [debugVerbose, setDebugVerbose] = useState(false);
+  const [showDebugOptions, setShowDebugOptions] = useState(true);
   const [dryRun, setDryRun] = useState(false);
   const [progressStage, setProgressStage] = useState(0);
 
@@ -118,7 +118,7 @@ export default function App() {
 
       const params = new URLSearchParams();
       if (debugEnabled) {
-        params.append('debug', debugVerbose ? 'verbose' : 'true');
+        params.append('debug', 'verbose');
       }
       if (dryRun) {
         params.append('dryRun', 'true');
@@ -167,7 +167,7 @@ export default function App() {
                 responseText: payload.responseText ?? null,
                 requestOptions: {
                   debug: debugEnabled,
-                  verbose: debugVerbose,
+                  verbose: debugEnabled,
                   dryRun
                 }
               },
@@ -197,7 +197,7 @@ export default function App() {
             responseText: payload.responseText ?? null,
             requestOptions: {
               debug: debugEnabled,
-              verbose: debugVerbose,
+              verbose: debugEnabled,
               dryRun
             }
           },
@@ -210,7 +210,7 @@ export default function App() {
         setIsSubmitting(false);
       }
     },
-    [task, selectedFiles, debugEnabled, debugVerbose, dryRun]
+    [task, selectedFiles, debugEnabled, dryRun]
   );
 
   const latestEntry = isSubmitting ? null : (history[0] || null);
@@ -260,42 +260,39 @@ export default function App() {
               <FilePreviewList files={selectedFiles} onClear={() => setSelectedFiles([])} disabled={isSubmitting} />
             )}
 
-            <fieldset className="field options">
-              <legend>オプション</legend>
-              <label className="option">
+            <div className={`field options debug-options ${showDebugOptions ? 'is-expanded' : 'is-collapsed'}`}>
+              <label className="debug-options-header">
                 <input
                   type="checkbox"
-                  checked={dryRun}
-                  onChange={(event) => setDryRun(event.target.checked)}
+                  checked={showDebugOptions}
+                  onChange={(event) => setShowDebugOptions(event.target.checked)}
                   disabled={isSubmitting}
                 />
-                <span>ドライラン（コマンド実行をスキップ）</span>
+                <span className="debug-options-title">デバッグオプション</span>
               </label>
-              <label className="option">
-                <input
-                  type="checkbox"
-                  checked={debugEnabled}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    setDebugEnabled(enabled);
-                    if (!enabled) {
-                      setDebugVerbose(false);
-                    }
-                  }}
-                  disabled={isSubmitting}
-                />
-                <span>プラン生成のデバッグ情報を含める</span>
-              </label>
-              <label className="option nested">
-                <input
-                  type="checkbox"
-                  checked={debugVerbose}
-                  onChange={(event) => setDebugVerbose(event.target.checked)}
-                  disabled={isSubmitting || !debugEnabled}
-                />
-                <span>生レスポンスを含める（詳細）</span>
-              </label>
-            </fieldset>
+              {showDebugOptions && (
+                <div className="debug-options-body">
+                  <label className="option">
+                    <input
+                      type="checkbox"
+                      checked={dryRun}
+                      onChange={(event) => setDryRun(event.target.checked)}
+                      disabled={isSubmitting}
+                    />
+                    <span>ドライラン（コマンド実行をスキップ）</span>
+                  </label>
+                  <label className="option">
+                    <input
+                      type="checkbox"
+                      checked={debugEnabled}
+                      onChange={(event) => setDebugEnabled(event.target.checked)}
+                      disabled={isSubmitting}
+                    />
+                    <span>プラン生成のデバッグ情報を含める（生レスポンス含む）</span>
+                  </label>
+                </div>
+              )}
+            </div>
 
             <div className="form-actions">
               <button type="submit" disabled={isSubmitting}>
