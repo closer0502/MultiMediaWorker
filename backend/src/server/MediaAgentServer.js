@@ -319,18 +319,14 @@ export class MediaAgentServer {
       dryRun
     };
 
+    const historyRecords = await this.collectRevisionHistory(baseRecord);
+    const originalTask =
+      historyRecords.length > 0
+        ? historyRecords[historyRecords.length - 1].task || ''
+        : baseRecord.task || '';
+
     const revisionFiles = await this.prepareRevisionFiles(baseRecord);
-    const previousOutputs = Array.isArray(baseRecord.result?.resolvedOutputs)
-      ? baseRecord.result.resolvedOutputs
-      : [];
-    const previousPlan = baseRecord.plan ?? baseRecord.rawPlan ?? null;
-    const revisionTask = this.composeRevisionTask(
-      baseRecord.task || '',
-      complaint,
-      previousOutputs,
-      baseRecord.result || null,
-      previousPlan
-    );
+    const revisionTask = this.composeRevisionTask(originalTask, complaint, historyRecords);
 
     const agentRequest = {
       task: revisionTask,
@@ -516,6 +512,38 @@ export class MediaAgentServer {
   }
 
   /**
+   * 対象セッションから親セッションへ遡り、再編集履歴を収集する。
+   * @param {Record<string, any>} startRecord 起点となるセッション記録
+   * @returns {Promise<Record<string, any>[]>}
+   */
+  async collectRevisionHistory(startRecord) {
+    if (!startRecord) {
+      return [];
+    }
+    /** @type {Record<string, any>[]} */
+    const history = [];
+    const visited = new Set();
+    let current = startRecord;
+    let safetyCounter = 0;
+
+    while (current && !visited.has(current.id) && safetyCounter < 25) {
+      history.push(current);
+      visited.add(current.id);
+      safetyCounter += 1;
+      if (!current.parentSessionId) {
+        break;
+      }
+      const parent = await this.readSessionRecord(current.parentSessionId);
+      if (!parent) {
+        break;
+      }
+      current = parent;
+    }
+
+    return history;
+  }
+
+  /**
    * 再編集用のファイル一覧を準備する。
    * @param {Record<string, any>} baseRecord ベースセッション記録
    * @returns {Promise<import('../agent/index.js').AgentRequest['files']>}
@@ -615,36 +643,19 @@ export class MediaAgentServer {
    * 再編集に渡すタスク文を整形する。
    * @param {string} originalTask 元のタスク
    * @param {string} complaint ユーザーからの指摘
-   * @param {Array<Record<string, any>>} outputs 以前の出力概要
-   * @param {Record<string, any>|null} previousResult 以前の実行結果
-   * @param {Record<string, any>|null} previousPlan 以前の計画
+   * @param {Record<string, any>[]} historyRecords 再編集の履歴（最新順）
    * @returns {string}
    */
-  composeRevisionTask(originalTask, complaint, outputs, previousResult, previousPlan) {
+  composeRevisionTask(originalTask, complaint, historyRecords) {
     const baseTask = originalTask || '（元の依頼内容は記録されていません）';
-    const outputSummary =
-      Array.isArray(outputs) && outputs.length > 0
-        ? outputs
-            .map((item, index) => {
-              const fileName = item?.absolutePath
-                ? path.basename(item.absolutePath)
-                : item?.path
-                ? path.basename(item.path)
-                : `output-${index + 1}`;
-              const description = item?.description ? ` - ${item.description}` : '';
-              return `${index + 1}. ${fileName}${description}`;
-            })
-            .join('\n')
-        : '前回の成果物情報は利用できません。';
-    const commandSummary = summarizeCommandHistory(previousResult, previousPlan);
+    const historyTable = buildRevisionHistoryTable(historyRecords || [], complaint);
 
     return [
       '再編集リクエストです。',
       `元の依頼内容:\n${baseTask}`,
-      `前回の成果物概要:\n${outputSummary}`,
-      `前回の実行コマンド:\n${commandSummary}`,
-      `ユーザーからのクレーム内容:\n${complaint}`,
-      '前回のミスを踏まえ、指摘を解消した新しい成果物を作成してください。必要に応じて前回の成果物ファイルを参照して構いません。'
+      'これまでの編集履歴:',
+      historyTable,
+      '前回までのミスを踏まえ、指摘を解消した新しい成果物を作成してください。必要に応じて前回の成果物ファイルを参照して構いません。'
     ].join('\n\n');
   }
 
@@ -821,6 +832,124 @@ function summarizeCommandHistory(result, plan) {
   }
 
   return '前回のコマンド履歴は記録されていません。';
+}
+
+/**
+ * Markdown テーブルで利用する値を整形する。
+ * @param {string} value
+ * @returns {string}
+ */
+function formatTableCell(value) {
+  if (!value) {
+    return '（なし）';
+  }
+  return String(value).replace(/\|/g, '／').replace(/\r?\n/g, '<br>');
+}
+
+/**
+ * テーブル用に成果物を整形する。
+ * @param {Record<string, any>} record
+ * @returns {string}
+ */
+function summarizeOutputsForTable(record) {
+  const outputs = record?.result?.resolvedOutputs;
+  if (!Array.isArray(outputs) || outputs.length === 0) {
+    return '（なし）';
+  }
+  const lines = outputs.map((item, index) => {
+    const fileName = item?.absolutePath
+      ? path.basename(item.absolutePath)
+      : item?.path
+      ? path.basename(item.path)
+      : `output-${index + 1}`;
+    const description = typeof item?.description === 'string' && item.description ? ` - ${item.description}` : '';
+    return `${index + 1}. ${fileName}${description}`;
+  });
+  return formatTableCell(lines.join('\n'));
+}
+
+/**
+ * テーブル用にコマンド履歴を整形する。
+ * @param {Record<string, any>} record
+ * @returns {string}
+ */
+function summarizeCommandsForTable(record) {
+  const plan = record?.plan ?? record?.rawPlan ?? null;
+  const result = record?.result ?? null;
+  const summary = summarizeCommandHistory(result, plan);
+  const lines = summary.split('\n').filter(Boolean);
+  if (lines.length > 3) {
+    const extra = lines.length - 3;
+    return formatTableCell([...lines.slice(0, 3), `...他${extra}件`].join('\n'));
+  }
+  return formatTableCell(lines.join('\n'));
+}
+
+/**
+ * 再編集履歴を Markdown テーブルとして整形する。
+ * @param {Record<string, any>[]} historyRecords
+ * @param {string} latestComplaint 今回のクレーム内容
+ * @returns {string}
+ */
+function buildRevisionHistoryTable(historyRecords, latestComplaint) {
+  if (!Array.isArray(historyRecords) || historyRecords.length === 0) {
+    return '履歴情報はまだありません。';
+  }
+  const header = '| バージョン | 生成物 | クレーム | 主なコマンド |\n| --- | --- | --- | --- |';
+  const revisionCount = historyRecords.reduce(
+    (count, record) => (record && record.parentSessionId ? count + 1 : count),
+    0
+  );
+  let remainingRevisions = revisionCount;
+
+  const rows = historyRecords.map((record, index) => {
+    const hasParent = Boolean(record?.parentSessionId);
+    let versionLabel;
+    if (hasParent) {
+      const label = `Rev.${remainingRevisions}`;
+      remainingRevisions -= 1;
+      versionLabel = index === 0 ? `${label} (最新)` : label;
+    } else {
+      versionLabel = 'Original';
+    }
+
+    const outputs = summarizeOutputsForTable(record);
+    let complaintText;
+    if (index === 0 && typeof latestComplaint === 'string' && latestComplaint.trim()) {
+      complaintText = latestComplaint.trim();
+    } else {
+      complaintText = extractComplaintMessage(record);
+    }
+    const complaint = formatTableCell(complaintText || '（なし）');
+    const commands = summarizeCommandsForTable(record);
+
+    return `| ${formatTableCell(versionLabel)} | ${outputs} | ${complaint} | ${commands} |`;
+  });
+
+  return `${header}\n${rows.join('\n')}`;
+}
+
+/**
+ * レコードからクレーム文を抽出する。
+ * @param {Record<string, any>} record
+ * @returns {string}
+ */
+function extractComplaintMessage(record) {
+  if (!record) {
+    return '';
+  }
+  const direct = typeof record?.complaintContext?.message === 'string' ? record.complaintContext.message.trim() : '';
+  if (direct) {
+    return direct;
+  }
+  const complaints = Array.isArray(record?.complaints) ? record.complaints : [];
+  for (let index = complaints.length - 1; index >= 0; index -= 1) {
+    const entry = complaints[index];
+    if (entry && typeof entry.message === 'string' && entry.message.trim()) {
+      return entry.message.trim();
+    }
+  }
+  return '';
 }
 
 /**
