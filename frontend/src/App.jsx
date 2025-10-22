@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
 
 const INITIAL_HISTORY = [];
@@ -80,6 +80,7 @@ export default function App() {
   const [showDebugOptions, setShowDebugOptions] = useState(true);
   const [dryRun, setDryRun] = useState(false);
   const [progressStage, setProgressStage] = useState(0);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (!isSubmitting) {
@@ -101,6 +102,20 @@ export default function App() {
   const resetForm = useCallback(() => {
     setTask('');
     setSelectedFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleFilesSelected = useCallback((files) => {
+    setSelectedFiles(files);
+  }, []);
+
+  const handleClearFiles = useCallback(() => {
+    setSelectedFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }, []);
 
   /**
@@ -249,16 +264,28 @@ export default function App() {
 
             <label className="field">
               <span>ファイルを添付</span>
-              <input
-                type="file"
-                multiple
-                onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
-                disabled={isSubmitting}
-              />
+              <div className="file-input-row">
+                <input
+                  ref={fileInputRef}
+                  className="file-input"
+                  type="file"
+                  multiple
+                  onChange={(event) => handleFilesSelected(Array.from(event.target.files || []))}
+                  disabled={isSubmitting}
+                />
+                <button
+                  type="button"
+                  className="file-input-trigger"
+                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  disabled={isSubmitting}
+                >
+                  ファイル選択
+                </button>
+              </div>
             </label>
 
             {selectedFiles.length > 0 && (
-              <FilePreviewList files={selectedFiles} onClear={() => setSelectedFiles([])} disabled={isSubmitting} />
+              <FilePreviewList files={selectedFiles} onClear={handleClearFiles} disabled={isSubmitting} />
             )}
 
             <div className={`field options debug-options ${showDebugOptions ? 'is-expanded' : 'is-collapsed'}`}>
@@ -925,6 +952,49 @@ function FilePreviewList({ files, onClear, disabled }) {
     () => files.reduce((sum, file) => sum + file.size, 0),
     [files]
   );
+  const [previewItems, setPreviewItems] = useState([]);
+
+  useEffect(() => {
+    const canUseObjectURL =
+      typeof globalThis !== 'undefined' &&
+      typeof globalThis.URL !== 'undefined' &&
+      typeof globalThis.URL.createObjectURL === 'function';
+    const canRevoke =
+      typeof globalThis !== 'undefined' &&
+      typeof globalThis.URL !== 'undefined' &&
+      typeof globalThis.URL.revokeObjectURL === 'function';
+
+    if (!files.length) {
+      setPreviewItems([]);
+      return undefined;
+    }
+
+    const nextItems = files.map((file) => {
+      const key = `${file.name}-${file.size}-${file.lastModified ?? ''}`;
+      const isImage = typeof file.type === 'string' ? file.type.startsWith('image/') : false;
+      const previewUrl = canUseObjectURL && isImage ? globalThis.URL.createObjectURL(file) : null;
+      const extension = (extractFileExtension(file.name) || '').toUpperCase();
+      return {
+        key,
+        file,
+        previewUrl,
+        fallbackLabel: extension || (file.type ? file.type.split('/')[0].toUpperCase() : 'FILE')
+      };
+    });
+
+    setPreviewItems(nextItems);
+
+    return () => {
+      if (!canRevoke) {
+        return;
+      }
+      nextItems.forEach((item) => {
+        if (item.previewUrl) {
+          globalThis.URL.revokeObjectURL(item.previewUrl);
+        }
+      });
+    };
+  }, [files]);
 
   if (!files.length) {
     return null;
@@ -940,10 +1010,21 @@ function FilePreviewList({ files, onClear, disabled }) {
         </button>
       </div>
       <ul>
-        {files.map((file) => (
-          <li key={file.name + file.size}>
-            <span>{file.name}</span>
-            <span>{formatFileSize(file.size)}</span>
+        {previewItems.map(({ key, file, previewUrl, fallbackLabel }) => (
+          <li key={key}>
+            <div className="file-preview-thumb">
+              {previewUrl ? (
+                <img src={previewUrl} alt={`${file.name}のプレビュー`} />
+              ) : (
+                <span>{fallbackLabel}</span>
+              )}
+            </div>
+            <div className="file-preview-info">
+              <span className="file-preview-name" title={file.name}>
+                {file.name}
+              </span>
+              <span className="file-preview-size">{formatFileSize(file.size)}</span>
+            </div>
           </li>
         ))}
       </ul>
