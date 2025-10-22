@@ -442,7 +442,7 @@ function ResultView({ entry }) {
 
       <div className="result-section">
         <h3>出力ファイル</h3>
-        <OutputList outputs={outputList} />
+        <OutputList outputs={outputList} showPreview={false} />
       </div>
 
       <div className="result-section">
@@ -610,20 +610,20 @@ function UploadedFileList({ files }) {
 }
 
 /**
- * @param {{ outputs: Array<any> }} props
+ * @param {{ outputs: Array<any>, showPreview?: boolean }} props
  * @returns {JSX.Element}
  */
-function OutputList({ outputs }) {
+function OutputList({ outputs, showPreview = true }) {
   if (!outputs.length) {
     return <p>生成ファイルはありません。</p>;
   }
   return (
     <ul className="output-list">
       {outputs.map((item) => {
-        const href = resolvePublicHref(item.publicPath);
-        const downloadName = deriveDownloadName(item);
+        const href = showPreview ? resolvePublicHref(item.publicPath) : '';
+        const downloadName = showPreview ? deriveDownloadName(item) : undefined;
         const previewElement =
-          href && item.exists
+          showPreview && href && item.exists
             ? renderOutputPreview(href, { filename: downloadName, description: item.description })
             : null;
         return (
@@ -635,13 +635,13 @@ function OutputList({ outputs }) {
             <div className="output-meta">
               <span>{item.exists ? '存在' : '未作成'}</span>
               {item.size != null && <span>{formatFileSize(item.size)}</span>}
-              {href && (
+              {showPreview && href && (
                 <a className="button-link" href={href} download={downloadName} rel="noreferrer">
                   ダウンロード
                 </a>
               )}
             </div>
-            {previewElement && <div className="output-preview">{previewElement}</div>}
+            {showPreview && previewElement && <div className="output-preview">{previewElement}</div>}
           </li>
         );
       })}
