@@ -86,6 +86,7 @@ export class OpenAIPlanner {
       ? {
           model: this.model,
           developerPrompt,
+          requestPayload: safeSerialize(responsePayload),
           responseText,
           parsed: normalized,
           rawResponse: options.includeRawResponse ? safeSerialize(response) : undefined
