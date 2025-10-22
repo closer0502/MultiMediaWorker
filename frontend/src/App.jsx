@@ -80,6 +80,9 @@ export default function App() {
   const [showDebugOptions, setShowDebugOptions] = useState(true);
   const [dryRun, setDryRun] = useState(false);
   const [progressStage, setProgressStage] = useState(0);
+  const [complaintText, setComplaintText] = useState('');
+  const [complaintError, setComplaintError] = useState('');
+  const [isSubmittingComplaint, setIsSubmittingComplaint] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -166,11 +169,12 @@ export default function App() {
           const message = payload?.error || '実行中に問題が発生しました。';
           setError(message);
           if (payload) {
+            const recordedAt = payload.submittedAt || submittedAt;
             setHistory((prev) => [
               {
                 id: payload.sessionId || `error-${Date.now()}`,
-                submittedAt,
-                task,
+                submittedAt: recordedAt,
+                task: payload.task || task,
                 plan: payload.plan || null,
                 rawPlan: payload.rawPlan ?? payload.plan ?? null,
                 result: payload.result || null,
@@ -180,6 +184,8 @@ export default function App() {
                 error: payload.detail || message,
                 debug: payload.debug || null,
                 responseText: payload.responseText ?? null,
+                parentSessionId: payload.parentSessionId ?? null,
+                complaint: payload.complaint ?? null,
                 requestOptions: {
                   debug: debugEnabled,
                   verbose: debugEnabled,
@@ -196,11 +202,12 @@ export default function App() {
           throw new Error('サーバーから空の応答が返されました。');
         }
 
+        const recordedAt = payload.submittedAt || submittedAt;
         setHistory((prev) => [
           {
             id: payload.sessionId,
-            submittedAt,
-            task: payload.task,
+            submittedAt: recordedAt,
+            task: payload.task || task,
             plan: payload.plan,
             rawPlan: payload.rawPlan ?? payload.plan ?? null,
             result: payload.result,
@@ -210,6 +217,8 @@ export default function App() {
             error: payload.detail || null,
             debug: payload.debug || null,
             responseText: payload.responseText ?? null,
+            parentSessionId: payload.parentSessionId ?? null,
+            complaint: payload.complaint ?? null,
             requestOptions: {
               debug: debugEnabled,
               verbose: debugEnabled,
@@ -218,6 +227,8 @@ export default function App() {
           },
           ...prev
         ]);
+        setComplaintText('');
+        setComplaintError('');
 
       } catch (submitError) {
         setError(submitError.message);
@@ -231,6 +242,123 @@ export default function App() {
   const latestEntry = isSubmitting ? null : (history[0] || null);
   const latestOutputsEntry = isSubmitting ? null : (history[0] || null);
   const latestOutputs = latestOutputsEntry?.result?.resolvedOutputs || [];
+  const handleComplaintSubmit = useCallback(async () => {
+    const complaintValue = complaintText.trim();
+    const baseSessionId = latestOutputsEntry?.id || '';
+    const baseTask = latestOutputsEntry?.task || '';
+    const hasOutputs = Array.isArray(latestOutputs) && latestOutputs.length > 0;
+
+    if (!complaintValue) {
+      setComplaintError('クレーム内容を入力してください。');
+      return;
+    }
+    if (!baseSessionId || !hasOutputs) {
+      setComplaintError('再編集できる生成物が見つかりません。');
+      return;
+    }
+    if (isSubmittingComplaint || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setIsSubmittingComplaint(true);
+    setComplaintError('');
+
+    const params = new URLSearchParams();
+    if (debugEnabled) {
+      params.append('debug', 'verbose');
+    }
+    if (dryRun) {
+      params.append('dryRun', 'true');
+    }
+
+    const url = `/api/revisions${params.toString() ? `?${params.toString()}` : ''}`;
+    const submittedAt = new Date().toISOString();
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionId: baseSessionId,
+          complaint: complaintValue
+        })
+      });
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const message = payload?.error || '再編集のリクエストに失敗しました。';
+        setComplaintError(message);
+        if (payload) {
+          const recordedAt = payload.submittedAt || submittedAt;
+          setHistory((prev) => [
+            {
+              id: payload.sessionId || `revision-error-${Date.now()}`,
+              submittedAt: recordedAt,
+              task: payload.task || baseTask,
+              plan: payload.plan || null,
+              rawPlan: payload.rawPlan ?? payload.plan ?? null,
+              result: payload.result || null,
+              phases: payload.phases || [],
+              uploadedFiles: payload.uploadedFiles || [],
+              status: payload.status || 'failed',
+              error: payload.detail || message,
+              debug: payload.debug || null,
+              responseText: payload.responseText ?? null,
+              parentSessionId: payload.parentSessionId ?? baseSessionId,
+              complaint: payload.complaint ?? complaintValue,
+              requestOptions: {
+                debug: debugEnabled,
+                verbose: debugEnabled,
+                dryRun
+              }
+            },
+            ...prev
+          ]);
+        }
+        return;
+      }
+
+      if (!payload) {
+        throw new Error('サーバーから空の応答が返されました。');
+      }
+
+      const recordedAt = payload.submittedAt || submittedAt;
+      setHistory((prev) => [
+        {
+          id: payload.sessionId,
+          submittedAt: recordedAt,
+          task: payload.task || baseTask,
+          plan: payload.plan,
+          rawPlan: payload.rawPlan ?? payload.plan ?? null,
+          result: payload.result,
+          phases: payload.phases || [],
+          uploadedFiles: payload.uploadedFiles || [],
+          status: payload.status || 'success',
+          error: payload.detail || null,
+          debug: payload.debug || null,
+          responseText: payload.responseText ?? null,
+          parentSessionId: payload.parentSessionId ?? baseSessionId,
+          complaint: payload.complaint ?? complaintValue,
+          requestOptions: {
+            debug: debugEnabled,
+            verbose: debugEnabled,
+            dryRun
+          }
+        },
+        ...prev
+      ]);
+      setComplaintText('');
+    } catch (submitError) {
+      setComplaintError(submitError.message);
+    } finally {
+      setIsSubmitting(false);
+      setIsSubmittingComplaint(false);
+    }
+  }, [complaintText, latestOutputsEntry, latestOutputs, debugEnabled, dryRun, isSubmitting, isSubmittingComplaint, setHistory]);
   const progressPercent = useMemo(() => {
     if (!isSubmitting) {
       return 0;
@@ -238,6 +366,13 @@ export default function App() {
     const currentStep = Math.min(progressStage + 1, PROGRESS_STEPS.length);
     return Math.min(100, Math.round((currentStep / PROGRESS_STEPS.length) * 100));
   }, [progressStage, isSubmitting]);
+  const complaintTextTrimmed = complaintText.trim();
+  const canSubmitRevision = Boolean(!isSubmitting && latestOutputsEntry && latestOutputs.length > 0);
+  const complaintButtonDisabled =
+    isSubmitting || isSubmittingComplaint || !canSubmitRevision || complaintTextTrimmed.length === 0;
+  const complaintHelperMessage = canSubmitRevision
+    ? '最新の生成物に対するクレーム内容を記入してください。'
+    : '修正リクエストは生成物が確認できる状態で利用できます。';
 
   return (
     <div className="app">
@@ -373,6 +508,29 @@ export default function App() {
           ) : (
             <p className="note">まだ表示できる生成物がありません。</p>
           )}
+          <div className="complaint-section">
+            <h3>修正リクエスト</h3>
+            <p className="complaint-hint">{complaintHelperMessage}</p>
+            <textarea
+              value={complaintText}
+              onChange={(event) => {
+                setComplaintText(event.target.value);
+                if (complaintError) {
+                  setComplaintError('');
+                }
+              }}
+              placeholder="例: 出力された動画が指定より暗いので明るさを調整してください。"
+              rows={4}
+              disabled={isSubmittingComplaint || isSubmitting || !canSubmitRevision}
+            />
+            <div className="complaint-actions">
+              <button type="button" onClick={handleComplaintSubmit} disabled={complaintButtonDisabled}>
+                {isSubmittingComplaint ? '送信中...' : '再編集を依頼'}
+              </button>
+              <span className="complaint-hint">最新の生成物をもとに再編集を依頼します。</span>
+            </div>
+            {complaintError && <div className="error">{complaintError}</div>}
+          </div>
         </section>
 
         {latestEntry && (
@@ -411,11 +569,18 @@ function ResultView({ entry }) {
     <div className="result-view">
       <div className="result-header">
         <span className={`status-chip status-${entry.status}`}>{statusLabel}</span>
+        {entry.parentSessionId && <span className="chip">再編集</span>}
         {entry.requestOptions?.dryRun && <span className="chip">ドライラン</span>}
         {entry.requestOptions?.debug && <span className="chip">デバッグ</span>}
       </div>
 
       {entry.error && <div className="error inline">{entry.error}</div>}
+      {entry.complaint && (
+        <div className="result-section">
+          <h3>ユーザーからのクレーム内容</h3>
+          <p>{entry.complaint}</p>
+        </div>
+      )}
 
       <div className="result-section">
         <h3>ワークフロー</h3>
@@ -798,9 +963,11 @@ function HistoryList({ entries }) {
         <li key={item.id}>
           <div className="history-row">
             <span className={`status-chip status-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span>
+            {item.parentSessionId && <span className="chip">再編集</span>}
             <span>{new Date(item.submittedAt).toLocaleString()}</span>
           </div>
           <p className="history-task">{item.task}</p>
+          {item.complaint && <p className="history-complaint">クレーム内容: {item.complaint}</p>}
           <code className="command-line small">
             {buildPlanSummary(item.plan ?? item.rawPlan) || '（プランなし）'}
           </code>

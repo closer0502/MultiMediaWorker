@@ -3,6 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 import { MediaAgentTaskError } from '../agent/index.js';
 
@@ -33,6 +34,7 @@ export class MediaAgentServer {
 
     this.prepareSession = this.prepareSession.bind(this);
     this.handleTaskRequest = this.handleTaskRequest.bind(this);
+    this.handleRevisionRequest = this.handleRevisionRequest.bind(this);
     this.handleGetTools = this.handleGetTools.bind(this);
   }
 
@@ -93,6 +95,7 @@ export class MediaAgentServer {
   configureRoutes() {
     this.app.get('/api/tools', this.handleGetTools);
     this.app.post('/api/tasks', this.prepareSession, this.upload.array('files'), this.handleTaskRequest);
+    this.app.post('/api/revisions', this.prepareSession, this.handleRevisionRequest);
     this.app.use((err, req, res, next) => {
       // eslint-disable-next-line no-console
       console.error(err);
@@ -165,6 +168,12 @@ export class MediaAgentServer {
 
     const debugMode = parseDebugMode(req.query?.debug);
     const dryRun = parseBoolean(req.query?.dryRun);
+    const submittedAt = new Date().toISOString();
+    const requestOptions = {
+      debug: debugMode.enabled,
+      verbose: debugMode.enabled,
+      dryRun
+    };
 
     const files = Array.isArray(req.files)
       ? req.files.map((file, index) => ({
@@ -183,6 +192,8 @@ export class MediaAgentServer {
     };
 
     const requestPhase = createRequestPhase(task, files, { dryRun, debug: debugMode.enabled });
+    requestPhase.meta.parentSessionId = null;
+    requestPhase.meta.revision = false;
 
     try {
       const agentResponse = await this.agent.runTask(agentRequest, {
@@ -194,6 +205,22 @@ export class MediaAgentServer {
       });
 
       const phases = [requestPhase, ...agentResponse.phases];
+      const record = this.buildSessionRecord({
+        sessionId: session.id,
+        submittedAt,
+        task,
+        status: 'success',
+        plan: agentResponse.plan,
+        rawPlan: agentResponse.rawPlan ?? agentResponse.plan,
+        result: agentResponse.result,
+        phases,
+        uploadedFiles: files,
+        requestOptions,
+        debug: debugMode.enabled ? agentResponse.debug ?? null : null,
+        parentSessionId: null,
+        complaintContext: null
+      });
+      await this.writeSessionRecord(record);
 
       res.json({
         status: 'success',
@@ -204,7 +231,10 @@ export class MediaAgentServer {
         result: agentResponse.result,
         phases,
         debug: debugMode.enabled ? agentResponse.debug ?? null : undefined,
-        uploadedFiles: files
+        uploadedFiles: files,
+        parentSessionId: null,
+        complaint: null,
+        submittedAt
       });
     } catch (error) {
       const isAgentError = error instanceof MediaAgentTaskError;
@@ -212,6 +242,25 @@ export class MediaAgentServer {
       const errorContext = isAgentError ? error.context || {} : {};
       const planPayload = isAgentError ? errorContext.plan ?? null : null;
       const rawPlan = isAgentError ? errorContext.rawPlan ?? planPayload : null;
+      const record = this.buildSessionRecord({
+        sessionId: session.id,
+        submittedAt,
+        task,
+        status: 'failed',
+        plan: planPayload,
+        rawPlan,
+        result: null,
+        phases,
+        uploadedFiles: files,
+        requestOptions,
+        debug: debugMode.enabled ? errorContext.debug ?? null : null,
+        error: 'コマンド生成に失敗しました。',
+        detail: error.message,
+        responseText: isAgentError ? errorContext.responseText ?? null : null,
+        parentSessionId: null,
+        complaintContext: null
+      });
+      await this.writeSessionRecord(record);
 
       res.status(500).json({
         status: 'failed',
@@ -223,9 +272,380 @@ export class MediaAgentServer {
         rawPlan,
         responseText: isAgentError ? errorContext.responseText ?? null : null,
         debug: debugMode.enabled ? errorContext.debug ?? null : undefined,
-        uploadedFiles: files
+        uploadedFiles: files,
+        parentSessionId: null,
+        complaint: null,
+        submittedAt
       });
     }
+  }
+
+  /**
+   * 再編集リクエストを処理する。
+   * @param {ExpressRequest} req リクエスト
+   * @param {ExpressResponse} res レスポンス
+   */
+  async handleRevisionRequest(req, res) {
+    const baseSessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId.trim() : '';
+    const complaint = typeof req.body?.complaint === 'string' ? req.body.complaint.trim() : '';
+
+    if (!baseSessionId) {
+      res.status(400).json({ error: 'sessionId フィールドは必須です。' });
+      return;
+    }
+    if (!complaint) {
+      res.status(400).json({ error: 'complaint フィールドは必須です。' });
+      return;
+    }
+
+    const session = req.agentSession;
+    if (!session) {
+      res.status(500).json({ error: 'セッションが初期化されていません。' });
+      return;
+    }
+
+    const baseRecord = await this.readSessionRecord(baseSessionId);
+    if (!baseRecord) {
+      res.status(404).json({ error: '指定されたセッションが見つかりません。' });
+      return;
+    }
+
+    const debugMode = parseDebugMode(req.query?.debug);
+    const dryRun = parseBoolean(req.query?.dryRun);
+    const submittedAt = new Date().toISOString();
+    const requestOptions = {
+      debug: debugMode.enabled,
+      verbose: debugMode.enabled,
+      dryRun
+    };
+
+    const revisionFiles = await this.prepareRevisionFiles(baseRecord);
+    const previousOutputs = Array.isArray(baseRecord.result?.resolvedOutputs)
+      ? baseRecord.result.resolvedOutputs
+      : [];
+    const previousPlan = baseRecord.plan ?? baseRecord.rawPlan ?? null;
+    const revisionTask = this.composeRevisionTask(
+      baseRecord.task || '',
+      complaint,
+      previousOutputs,
+      baseRecord.result || null,
+      previousPlan
+    );
+
+    const agentRequest = {
+      task: revisionTask,
+      files: revisionFiles,
+      outputDir: session.outputDir
+    };
+
+    const requestPhase = createRequestPhase(revisionTask, revisionFiles, { dryRun, debug: debugMode.enabled });
+    requestPhase.meta.parentSessionId = baseSessionId;
+    requestPhase.meta.revision = true;
+    requestPhase.meta.complaint = complaint.slice(0, 200);
+    requestPhase.meta.revisionFileCount = revisionFiles.length;
+
+    try {
+      const agentResponse = await this.agent.runTask(agentRequest, {
+        cwd: session.inputDir,
+        publicRoot: this.publicRoot,
+        dryRun,
+        debug: debugMode.enabled,
+        includeRawResponse: debugMode.includeRaw
+      });
+
+      const phases = [requestPhase, ...agentResponse.phases];
+      const record = this.buildSessionRecord({
+        sessionId: session.id,
+        submittedAt,
+        task: revisionTask,
+        status: 'success',
+        plan: agentResponse.plan,
+        rawPlan: agentResponse.rawPlan ?? agentResponse.plan,
+        result: agentResponse.result,
+        phases,
+        uploadedFiles: revisionFiles,
+        requestOptions,
+        debug: debugMode.enabled ? agentResponse.debug ?? null : null,
+        parentSessionId: baseSessionId,
+        complaintContext: { sessionId: baseSessionId, message: complaint }
+      });
+      await this.writeSessionRecord(record);
+      await this.appendComplaintEntry(baseSessionId, {
+        submittedAt,
+        message: complaint,
+        followUpSessionId: session.id,
+        status: 'success'
+      });
+
+      res.json({
+        status: 'success',
+        sessionId: session.id,
+        task: revisionTask,
+        plan: agentResponse.plan,
+        rawPlan: agentResponse.rawPlan ?? agentResponse.plan,
+        result: agentResponse.result,
+        phases,
+        debug: debugMode.enabled ? agentResponse.debug ?? null : undefined,
+        uploadedFiles: revisionFiles,
+        parentSessionId: baseSessionId,
+        complaint,
+        submittedAt
+      });
+    } catch (error) {
+      const isAgentError = error instanceof MediaAgentTaskError;
+      const phases = [requestPhase, ...(isAgentError ? error.phases : [])];
+      const errorContext = isAgentError ? error.context || {} : {};
+      const planPayload = isAgentError ? errorContext.plan ?? null : null;
+      const rawPlan = isAgentError ? errorContext.rawPlan ?? planPayload : null;
+      const record = this.buildSessionRecord({
+        sessionId: session.id,
+        submittedAt,
+        task: revisionTask,
+        status: 'failed',
+        plan: planPayload,
+        rawPlan,
+        result: null,
+        phases,
+        uploadedFiles: revisionFiles,
+        requestOptions,
+        debug: debugMode.enabled ? errorContext.debug ?? null : null,
+        error: 'コマンド生成に失敗しました。',
+        detail: error.message,
+        responseText: isAgentError ? errorContext.responseText ?? null : null,
+        parentSessionId: baseSessionId,
+        complaintContext: { sessionId: baseSessionId, message: complaint }
+      });
+      await this.writeSessionRecord(record);
+      await this.appendComplaintEntry(baseSessionId, {
+        submittedAt,
+        message: complaint,
+        followUpSessionId: session.id,
+        status: 'failed',
+        error: error.message
+      });
+
+      res.status(500).json({
+        status: 'failed',
+        sessionId: session.id,
+        error: 'コマンド生成に失敗しました。',
+        detail: error.message,
+        phases,
+        plan: planPayload,
+        rawPlan,
+        responseText: isAgentError ? errorContext.responseText ?? null : null,
+        debug: debugMode.enabled ? errorContext.debug ?? null : undefined,
+        uploadedFiles: revisionFiles,
+        parentSessionId: baseSessionId,
+        complaint,
+        submittedAt
+      });
+    }
+  }
+
+  /**
+   * セッション結果をフラットな形にまとめる。
+   * @param {Object} payload セッション情報
+   * @returns {Record<string, any>}
+   */
+  buildSessionRecord(payload) {
+    return {
+      id: payload.sessionId,
+      submittedAt: payload.submittedAt,
+      task: payload.task,
+      status: payload.status,
+      plan: payload.plan ?? null,
+      rawPlan: payload.rawPlan ?? null,
+      result: payload.result ?? null,
+      phases: payload.phases ?? [],
+      uploadedFiles: payload.uploadedFiles ?? [],
+      requestOptions: payload.requestOptions ?? {},
+      debug: payload.debug ?? null,
+      error: payload.error ?? null,
+      detail: payload.detail ?? null,
+      responseText: payload.responseText ?? null,
+      parentSessionId: payload.parentSessionId ?? null,
+      complaintContext: payload.complaintContext ?? null,
+      complaints: Array.isArray(payload.complaints) ? payload.complaints : []
+    };
+  }
+
+  /**
+   * セッション結果を保存する。
+   * @param {Record<string, any>} record 保存対象
+   * @returns {Promise<void>}
+   */
+  async writeSessionRecord(record) {
+    const filePath = this.getSessionRecordPath(record.id);
+    const payload = JSON.stringify(record, null, 2);
+    await fs.writeFile(filePath, payload, 'utf8');
+  }
+
+  /**
+   * セッション結果を読み込む。
+   * @param {string} sessionId 対象セッションID
+   * @returns {Promise<Record<string, any>|null>}
+   */
+  async readSessionRecord(sessionId) {
+    const filePath = this.getSessionRecordPath(sessionId);
+    try {
+      const buffer = await fs.readFile(filePath, 'utf8');
+      return JSON.parse(buffer);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * セッション記録へクレーム履歴を追加する。
+   * @param {string} sessionId 対象セッションID
+   * @param {Record<string, any>} entry 追加する履歴
+   * @returns {Promise<void>}
+   */
+  async appendComplaintEntry(sessionId, entry) {
+    const record = await this.readSessionRecord(sessionId);
+    if (!record) {
+      return;
+    }
+    const complaints = Array.isArray(record.complaints) ? record.complaints.slice() : [];
+    complaints.push(entry);
+    record.complaints = complaints;
+    await this.writeSessionRecord(record);
+  }
+
+  /**
+   * 再編集用のファイル一覧を準備する。
+   * @param {Record<string, any>} baseRecord ベースセッション記録
+   * @returns {Promise<import('../agent/index.js').AgentRequest['files']>}
+   */
+  async prepareRevisionFiles(baseRecord) {
+    const collected = [];
+    const seen = new Set();
+
+    const inputs = Array.isArray(baseRecord.uploadedFiles) ? baseRecord.uploadedFiles : [];
+    for (let index = 0; index < inputs.length; index += 1) {
+      const descriptor = await this.createRevisionFileDescriptor(inputs[index], `input-${index}`, seen);
+      if (descriptor) {
+        collected.push(descriptor);
+      }
+    }
+
+    const outputs = Array.isArray(baseRecord.result?.resolvedOutputs) ? baseRecord.result.resolvedOutputs : [];
+    for (let index = 0; index < outputs.length; index += 1) {
+      const output = outputs[index];
+      if (!output || !output.exists) {
+        continue;
+      }
+      const descriptor = await this.createRevisionFileDescriptor(
+        {
+          id: `output-${index}`,
+          originalName: output.absolutePath ? path.basename(output.absolutePath) : path.basename(output.path || `output-${index}`),
+          absolutePath: output.absolutePath || output.path,
+          size: typeof output.size === 'number' ? output.size : undefined,
+          mimeType: undefined
+        },
+        `output-${index}`,
+        seen
+      );
+      if (descriptor) {
+        collected.push(descriptor);
+      }
+    }
+
+    return collected;
+  }
+
+  /**
+   * ファイル記述子を構築する。
+   * @param {Record<string, any>} source 元データ
+   * @param {string} fallbackId IDが無い場合の接頭辞
+   * @param {Set<string>} seen 既知パス集合
+   * @returns {Promise<import('../agent/index.js').AgentRequest['files'][number]|null>}
+   */
+  async createRevisionFileDescriptor(source, fallbackId, seen) {
+    const targetPath = typeof source?.absolutePath === 'string' ? source.absolutePath : '';
+    if (!targetPath) {
+      return null;
+    }
+    const absolutePath = path.resolve(targetPath);
+    if (seen.has(absolutePath)) {
+      return null;
+    }
+    if (!existsSync(absolutePath)) {
+      return null;
+    }
+
+    let stat;
+    try {
+      stat = await fs.stat(absolutePath);
+    } catch {
+      return null;
+    }
+    if (!stat.isFile()) {
+      return null;
+    }
+
+    const descriptor = {
+      id: typeof source.id === 'string' && source.id ? source.id : fallbackId,
+      originalName:
+        typeof source.originalName === 'string' && source.originalName
+          ? source.originalName
+          : path.basename(absolutePath),
+      absolutePath,
+      size: typeof source.size === 'number' ? source.size : stat.size,
+      mimeType: typeof source.mimeType === 'string' && source.mimeType ? source.mimeType : guessMimeType(absolutePath)
+    };
+
+    seen.add(absolutePath);
+    return descriptor;
+  }
+
+  /**
+   * セッション記録の保存パスを取得する。
+   * @param {string} sessionId セッションID
+   * @returns {string}
+   */
+  getSessionRecordPath(sessionId) {
+    return path.join(this.storageRoot, `${sessionId}.json`);
+  }
+
+  /**
+   * 再編集に渡すタスク文を整形する。
+   * @param {string} originalTask 元のタスク
+   * @param {string} complaint ユーザーからの指摘
+   * @param {Array<Record<string, any>>} outputs 以前の出力概要
+   * @param {Record<string, any>|null} previousResult 以前の実行結果
+   * @param {Record<string, any>|null} previousPlan 以前の計画
+   * @returns {string}
+   */
+  composeRevisionTask(originalTask, complaint, outputs, previousResult, previousPlan) {
+    const baseTask = originalTask || '（元の依頼内容は記録されていません）';
+    const outputSummary =
+      Array.isArray(outputs) && outputs.length > 0
+        ? outputs
+            .map((item, index) => {
+              const fileName = item?.absolutePath
+                ? path.basename(item.absolutePath)
+                : item?.path
+                ? path.basename(item.path)
+                : `output-${index + 1}`;
+              const description = item?.description ? ` - ${item.description}` : '';
+              return `${index + 1}. ${fileName}${description}`;
+            })
+            .join('\n')
+        : '前回の成果物情報は利用できません。';
+    const commandSummary = summarizeCommandHistory(previousResult, previousPlan);
+
+    return [
+      '再編集リクエストです。',
+      `元の依頼内容:\n${baseTask}`,
+      `前回の成果物概要:\n${outputSummary}`,
+      `前回の実行コマンド:\n${commandSummary}`,
+      `ユーザーからのクレーム内容:\n${complaint}`,
+      '前回のミスを踏まえ、指摘を解消した新しい成果物を作成してください。必要に応じて前回の成果物ファイルを参照して構いません。'
+    ].join('\n\n');
   }
 
   /**
@@ -356,6 +776,95 @@ function getFirstQueryValue(value) {
     return undefined;
   }
   return String(value);
+}
+
+/**
+ * 前回のコマンド履歴をサマリ文字列に変換する。
+ * @param {Record<string, any>|null} result 以前の実行結果
+ * @param {Record<string, any>|null} plan 以前の計画
+ * @returns {string}
+ */
+function summarizeCommandHistory(result, plan) {
+  if (result && Array.isArray(result.steps) && result.steps.length > 0) {
+    return result.steps
+      .map((step, index) => {
+        const command = typeof step.command === 'string' && step.command ? step.command : '(unknown)';
+        const args = Array.isArray(step.arguments) ? step.arguments.filter((arg) => typeof arg === 'string') : [];
+        const commandLine = [command, ...args].join(' ').trim();
+        const status = step.status || 'unknown';
+        const infoParts = [];
+        if (typeof step.exitCode === 'number') {
+          infoParts.push(`exit=${step.exitCode}`);
+        }
+        if (step.timedOut) {
+          infoParts.push('timed_out');
+        }
+        if (step.skipReason) {
+          infoParts.push(`skip=${step.skipReason}`);
+        }
+        const info = infoParts.length ? ` (${infoParts.join(', ')})` : '';
+        return `${index + 1}. [${status}] ${commandLine}${info}`;
+      })
+      .join('\n');
+  }
+
+  if (plan && Array.isArray(plan.steps) && plan.steps.length > 0) {
+    return plan.steps
+      .map((step, index) => {
+        const command = typeof step.command === 'string' && step.command ? step.command : '(unknown)';
+        const args = Array.isArray(step.arguments) ? step.arguments.filter((arg) => typeof arg === 'string') : [];
+        const commandLine = [command, ...args].join(' ').trim();
+        const reasoning = typeof step.reasoning === 'string' && step.reasoning ? ` - ${step.reasoning}` : '';
+        return `${index + 1}. ${commandLine}${reasoning}`;
+      })
+      .join('\n');
+  }
+
+  return '前回のコマンド履歴は記録されていません。';
+}
+
+/**
+ * 拡張子から簡易的にMIMEタイプを推定する。
+ * @param {string} filePath 対象パス
+ * @returns {string|undefined}
+ */
+function guessMimeType(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  switch (extension) {
+    case '.png':
+      return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.bmp':
+      return 'image/bmp';
+    case '.tiff':
+    case '.tif':
+      return 'image/tiff';
+    case '.mp4':
+    case '.m4v':
+      return 'video/mp4';
+    case '.mov':
+      return 'video/quicktime';
+    case '.webm':
+      return 'video/webm';
+    case '.mp3':
+      return 'audio/mpeg';
+    case '.wav':
+      return 'audio/wav';
+    case '.ogg':
+      return 'audio/ogg';
+    case '.m4a':
+      return 'audio/mp4';
+    case '.flac':
+      return 'audio/flac';
+    default:
+      return undefined;
+  }
 }
 
 export {
