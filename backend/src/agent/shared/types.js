@@ -8,6 +8,29 @@
  */
 
 /**
+ * @typedef {Object} AgentFileStreamMetadata
+ * @property {string|undefined} type
+ * @property {string|undefined} codec
+ * @property {number|undefined} width
+ * @property {number|undefined} height
+ * @property {string|undefined} frameRate
+ * @property {number|undefined} channels
+ * @property {number|undefined} sampleRate
+ * @property {string|undefined} pixelFormat
+ * @property {number|undefined} bitDepth
+ */
+
+/**
+ * @typedef {Object} AgentFileMetadata
+ * @property {string|undefined} formatName
+ * @property {number|undefined} durationSeconds
+ * @property {number|undefined} bitRate
+ * @property {AgentFileStreamMetadata|null} primaryStream
+ * @property {AgentFileStreamMetadata[]} otherStreams
+ * @property {Record<string, any>} raw
+ */
+
+/**
  * @typedef {Object} AgentRequest
  * @property {string} task
  * @property {AgentFile[]} files

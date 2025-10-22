@@ -34,7 +34,7 @@ export class OpenAIPlanner {
    * @returns {Promise<{plan: CommandPlan, rawPlan: any, debug?: Record<string, any>}>}
    */
   async plan(request, options = {}) {
-    const developerPrompt = this.promptBuilder.build(request);
+    const developerPrompt = await this.promptBuilder.build(request);
     /** @type {OpenAI.Responses.ResponseCreateParamsNonStreaming} */
     const responsePayload = {
       model: this.model,

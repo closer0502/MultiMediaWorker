@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import { formatMediaMetadataLines } from '../shared/MediaMetadata.js';
+
 /** @typedef {import('../registry/ToolRegistry.js').ToolRegistry} ToolRegistry */
 /** @typedef {import('../shared/types.js').AgentRequest} AgentRequest */
 
@@ -17,30 +19,15 @@ export class PromptBuilder {
   /**
    * Generates a multi-step planning instruction for the model.
    * @param {AgentRequest} request
-   * @returns {string}
+   * @returns {Promise<string>}
    */
-  build(request) {
+  async build(request) {
     const toolSummary = this.toolRegistry
       .describeExecutableCommands()
       .map((tool) => `- ${tool.id}: ${tool.description}`)
       .join('\n');
 
-    const fileSummary =
-      request.files.length > 0
-        ? request.files
-            .map((file, index) => {
-              const lines = [
-                `${index + 1}. ${file.originalName}`,
-                `   path: ${normalizePath(file.absolutePath)}`,
-                `   size: ${file.size} bytes`
-              ];
-              if (file.mimeType) {
-                lines.push(`   mime: ${file.mimeType}`);
-              }
-              return lines.join('\n');
-            })
-            .join('\n')
-        : 'No input files were provided.';
+    const fileSummary = await this.buildFileSummary(request);
 
     return [
       'You are a multimedia conversion CLI assistant.',
@@ -59,6 +46,41 @@ export class PromptBuilder {
       '- Add followUp or overview strings when helpful.',
       '- Use absolute paths and keep every path inside outputDir.'
     ].join('\n\n');
+  }
+
+  /**
+   * @param {AgentRequest} request
+   * @returns {Promise<string>}
+   */
+  async buildFileSummary(request) {
+    if (!request.files.length) {
+      return 'No input files were provided.';
+    }
+
+    const summaries = [];
+    for (let index = 0; index < request.files.length; index += 1) {
+      const file = request.files[index];
+      const lines = [
+        `${index + 1}. ${file.originalName}`,
+        `   path: ${normalizePath(file.absolutePath)}`,
+        `   size: ${file.size} bytes`
+      ];
+      if (file.mimeType) {
+        lines.push(`   mime: ${file.mimeType}`);
+      }
+      try {
+        const metadataLines = await formatMediaMetadataLines(file);
+        if (metadataLines && metadataLines.length) {
+          metadataLines.forEach((metaLine) => {
+            lines.push(`   ${metaLine}`);
+          });
+        }
+      } catch {
+        // 取得に失敗した場合は無視
+      }
+      summaries.push(lines.join('\n'));
+    }
+    return summaries.join('\n');
   }
 }
 
