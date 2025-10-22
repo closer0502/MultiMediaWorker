@@ -232,9 +232,10 @@ export default function App() {
       </header>
 
       <main className="content">
-        <section className="panel">
-          <h2>タスクを送信</h2>
-          <form className="task-form" onSubmit={handleSubmit}>
+        <div className="task-progress-layout">
+          <section className="panel task-panel">
+            <h2>タスクを送信</h2>
+            <form className="task-form" onSubmit={handleSubmit}>
             <label className="field">
               <span>目的 / 指示</span>
               <textarea
@@ -304,36 +305,37 @@ export default function App() {
             </div>
           </form>
           {error && <div className="error">{error}</div>}
-        </section>
-
-        {isSubmitting && (
-          <section className="panel progress-panel">
-            <h2>ただいま処理しています</h2>
-            <p className="progress-lead">仕上がりまで少々お待ちください。</p>
-            <div className="progress-bar">
-              <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }} />
-            </div>
-            <ul className="progress-steps">
-              {PROGRESS_STEPS.map((step, index) => {
-                let statusClass = '';
-                if (index === progressStage) {
-                  statusClass = 'is-active';
-                } else if (index < progressStage) {
-                  statusClass = 'is-complete';
-                }
-                return (
-                  <li key={step.title} className={`progress-step ${statusClass}`}>
-                    <span className="progress-step-index">{index + 1}</span>
-                    <div className="progress-step-body">
-                      <strong>{step.title}</strong>
-                      <span>{step.description}</span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
           </section>
-        )}
+
+          {isSubmitting && (
+            <section className="panel progress-panel">
+              <h2>ただいま処理しています</h2>
+              <p className="progress-lead">仕上がりまで少々お待ちください。</p>
+              <div className="progress-bar">
+                <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }} />
+              </div>
+              <ul className="progress-steps">
+                {PROGRESS_STEPS.map((step, index) => {
+                  let statusClass = '';
+                  if (index === progressStage) {
+                    statusClass = 'is-active';
+                  } else if (index < progressStage) {
+                    statusClass = 'is-complete';
+                  }
+                  return (
+                    <li key={step.title} className={`progress-step ${statusClass}`}>
+                      <span className="progress-step-index">{index + 1}</span>
+                      <div className="progress-step-body">
+                        <strong>{step.title}</strong>
+                        <span>{step.description}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+        </div>
 
         <section className="panel">
           <h2>生成物</h2>

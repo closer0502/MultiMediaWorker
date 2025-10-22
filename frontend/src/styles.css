@@ -33,6 +33,16 @@ body {
   margin-top: 2rem;
 }
 
+.task-progress-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.task-panel {
+  flex: 1 1 0%;
+}
+
 .panel {
   background: rgba(21, 27, 34, 0.85);
   border: 1px solid rgba(99, 110, 123, 0.3);
@@ -155,6 +165,9 @@ body {
 .progress-panel {
   border-color: rgba(56, 189, 248, 0.35);
   box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
+  flex: 0 0 340px;
+  min-width: 300px;
+  max-width: 360px;
 }
 
 .progress-lead {
@@ -198,6 +211,19 @@ body {
   background: rgba(13, 17, 23, 0.7);
   border: 1px solid rgba(56, 189, 248, 0.2);
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+@media (max-width: 960px) {
+  .task-progress-layout {
+    flex-direction: column;
+  }
+
+  .progress-panel {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
 }
 
 .progress-step.is-active {
