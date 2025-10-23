@@ -682,14 +682,35 @@ export class MediaAgentServer {
   }
 
   /**
-   * 必要なベースディレクトリを作成
+   * 一時出力ディレクトリを一括削除して初期状態に戻す
+   * @returns {Promise<void>}
+   */
+  async resetTemporaryDirectories() {
+    const temporaryDirs = [this.generatedRoot, this.sessionInputRoot];
+    await Promise.all(
+      temporaryDirs.map(async (dir) => {
+        try {
+          await fs.rm(dir, { recursive: true, force: true });
+        } catch (error) {
+          throw new Error(`一時ディレクトリのクリーンアップに失敗しました: ${dir}`, { cause: error });
+        }
+      })
+    );
+  }
+
+  /**
+   * 必要なベースディレクトリを作成し、一時領域を初期化
    * @returns {Promise<void>}
    */
   async ensureBaseDirectories() {
     await Promise.all(
-      [this.publicRoot, this.generatedRoot, this.storageRoot, this.sessionInputRoot].map((dir) =>
-        fs.mkdir(dir, { recursive: true })
-      )
+      [this.publicRoot, this.storageRoot].map((dir) => fs.mkdir(dir, { recursive: true }))
+    );
+
+    await this.resetTemporaryDirectories();
+
+    await Promise.all(
+      [this.generatedRoot, this.sessionInputRoot].map((dir) => fs.mkdir(dir, { recursive: true }))
     );
   }
 }
