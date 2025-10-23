@@ -102,6 +102,20 @@ export default function App() {
     return () => clearInterval(timer);
   }, [isSubmitting]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return undefined;
+    }
+    const { body } = document;
+    if (!body) {
+      return undefined;
+    }
+    body.classList.toggle('modal-open', isSubmitting);
+    return () => {
+      body.classList.remove('modal-open');
+    };
+  }, [isSubmitting]);
+
   const resetForm = useCallback(() => {
     setTask('');
     setSelectedFiles([]);
@@ -469,34 +483,6 @@ export default function App() {
           {error && <div className="error">{error}</div>}
           </section>
 
-          {isSubmitting && (
-            <section className="panel progress-panel">
-              <h2>ただいま処理しています</h2>
-              <p className="progress-lead">仕上がりまで少々お待ちください。</p>
-              <div className="progress-bar">
-                <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }} />
-              </div>
-              <ul className="progress-steps">
-                {PROGRESS_STEPS.map((step, index) => {
-                  let statusClass = '';
-                  if (index === progressStage) {
-                    statusClass = 'is-active';
-                  } else if (index < progressStage) {
-                    statusClass = 'is-complete';
-                  }
-                  return (
-                    <li key={step.title} className={`progress-step ${statusClass}`}>
-                      <span className="progress-step-index">{index + 1}</span>
-                      <div className="progress-step-body">
-                        <strong>{step.title}</strong>
-                        <span>{step.description}</span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
         </div>
 
         <section className="panel">
@@ -546,16 +532,55 @@ export default function App() {
             <HistoryList entries={history.slice(1)} />
           </section>
         )}
+      {isSubmitting && (
+        <ProgressModal stage={progressStage} percent={progressPercent} />
+      )}
+
       </main>
     </div>
   );
 }
 
-
 /**
- * @param {{ entry: any }} props
+ * @param {{ stage: number, percent: number }} props
  * @returns {JSX.Element}
  */
+function ProgressModal({ stage, percent }) {
+  return (
+    <div className="progress-modal" role="dialog" aria-modal="true" aria-labelledby="progress-modal-title">
+      <div className="progress-modal-backdrop" />
+      <div className="progress-modal-dialog">
+        <section className="panel progress-panel">
+          <h2 id="progress-modal-title">ただいま処理しています</h2>
+          <p className="progress-lead">仕上がりまで少々お待ちください。</p>
+          <div className="progress-bar">
+            <div className="progress-bar-fill" style={{ width: `${percent}%` }} />
+          </div>
+          <ul className="progress-steps">
+            {PROGRESS_STEPS.map((step, index) => {
+              let statusClass = '';
+              if (index === stage) {
+                statusClass = 'is-active';
+              } else if (index < stage) {
+                statusClass = 'is-complete';
+              }
+              return (
+                <li key={step.title} className={`progress-step ${statusClass}`}>
+                  <span className="progress-step-index">{index + 1}</span>
+                  <div className="progress-step-body">
+                    <strong>{step.title}</strong>
+                    <span>{step.description}</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function ResultView({ entry }) {
   const outputList = entry?.result?.resolvedOutputs || [];
   const statusLabel = STATUS_LABELS[entry.status] || entry.status || '不明';
