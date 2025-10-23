@@ -699,7 +699,37 @@ export class MediaAgentServer {
   }
 
   /**
-   * 必要なベースディレクトリを作成し、一時領域を初期化
+   * ストレージディレクトリに残ったセッション記録を削除
+   * @returns {Promise<void>}
+   */
+  async clearStorageRecords() {
+    let entries;
+    try {
+      entries = await fs.readdir(this.storageRoot, { withFileTypes: true });
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        return;
+      }
+      throw new Error('ストレージディレクトリの走査に失敗しました。', { cause: error });
+    }
+
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.json')) {
+          return;
+        }
+        const targetPath = path.join(this.storageRoot, entry.name);
+        try {
+          await fs.rm(targetPath, { force: true });
+        } catch (error) {
+          throw new Error(`ストレージファイルの削除に失敗しました: ${targetPath}`, { cause: error });
+        }
+      })
+    );
+  }
+
+  /**
+   * 必要なベースディレクトリを作成し、一時領域とストレージを初期化
    * @returns {Promise<void>}
    */
   async ensureBaseDirectories() {
@@ -707,6 +737,7 @@ export class MediaAgentServer {
       [this.publicRoot, this.storageRoot].map((dir) => fs.mkdir(dir, { recursive: true }))
     );
 
+    await this.clearStorageRecords();
     await this.resetTemporaryDirectories();
 
     await Promise.all(
