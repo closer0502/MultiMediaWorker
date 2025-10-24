@@ -10,7 +10,9 @@
     "dev:client": "vite --config frontend/vite.config.js",
     "build:client": "vite build --config frontend/vite.config.js",
     "preview:client": "vite preview --config frontend/vite.config.js",
-    "test": "node backend/tests/agent.test.js"
+    "test": "npm run test:backend",
+    "test:backend": "node backend/tests/agent.test.js",
+    "test:frontend": "vitest --run --config frontend/vite.config.js"
   },
   "keywords": [
     "openai",
@@ -30,7 +32,12 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^4.3.2",
-    "vite": "^5.4.1"
+    "jsdom": "^27.0.1",
+    "vite": "^5.4.1",
+    "vitest": "^4.0.2"
   }
 }

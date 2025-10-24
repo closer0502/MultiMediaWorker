@@ -18,6 +18,11 @@ export default defineConfig({
     outDir: path.join(__dirname, 'dist'),
     emptyOutDir: true
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: path.join(__dirname, 'tests/setupTests.js'),
+    globals: true
+  },
   server: {
     port: 5173,
     proxy: {
