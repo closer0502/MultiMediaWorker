@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PROGRESS_ROTATION_MS, PROGRESS_STEPS } from '../constants/app.js';
 
 const INITIAL_HISTORY = [];
+const LOG_LINE_LIMIT = 500;
 
 export function useTaskWorkflow() {
   const [task, setTask] = useState('');
@@ -16,7 +17,11 @@ export function useTaskWorkflow() {
   const [complaintText, setComplaintText] = useState('');
   const [complaintError, setComplaintError] = useState('');
   const [isSubmittingComplaint, setIsSubmittingComplaint] = useState(false);
+  const [liveLogs, setLiveLogs] = useState([]);
   const fileInputRef = useRef(null);
+  const eventSourceRef = useRef(null);
+  const logChannelRef = useRef('');
+  const logChunkBufferRef = useRef({ stdout: '', stderr: '' });
 
   useEffect(() => {
     if (!isSubmitting) {
@@ -50,6 +55,201 @@ export function useTaskWorkflow() {
     };
   }, [isSubmitting]);
 
+  const appendLogLines = useCallback((lines) => {
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return;
+    }
+    setLiveLogs((prev) => {
+      const merged = [...prev, ...lines];
+      if (merged.length > LOG_LINE_LIMIT) {
+        return merged.slice(merged.length - LOG_LINE_LIMIT);
+      }
+      return merged;
+    });
+  }, []);
+
+  const appendLogChunk = useCallback(
+    (stream, text) => {
+      if (!text) {
+        return;
+      }
+      const key = stream === 'stderr' ? 'stderr' : 'stdout';
+      const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const pending = logChunkBufferRef.current[key] || '';
+      const combined = pending + normalized;
+      const segments = combined.split('\n');
+      logChunkBufferRef.current[key] = segments.pop() ?? '';
+      if (segments.length === 0) {
+        return;
+      }
+      const lines = segments.map((line) => {
+        if (key === 'stderr') {
+          return line.length > 0 ? `[stderr] ${line}` : '[stderr]';
+        }
+        return line;
+      });
+      appendLogLines(lines);
+    },
+    [appendLogLines]
+  );
+
+  const flushPendingChunks = useCallback(() => {
+    const pending = logChunkBufferRef.current;
+    const lines = [];
+    if (pending.stdout) {
+      lines.push(pending.stdout);
+    }
+    if (pending.stderr) {
+      lines.push(`[stderr] ${pending.stderr}`);
+    }
+    logChunkBufferRef.current = { stdout: '', stderr: '' };
+    if (lines.length > 0) {
+      appendLogLines(lines);
+    }
+  }, [appendLogLines]);
+
+  const stopLogStream = useCallback(() => {
+    flushPendingChunks();
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    logChannelRef.current = '';
+    logChunkBufferRef.current = { stdout: '', stderr: '' };
+  }, [flushPendingChunks]);
+
+  const startLogStream = useCallback(() => {
+    if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') {
+      logChannelRef.current = '';
+      logChunkBufferRef.current = { stdout: '', stderr: '' };
+      setLiveLogs([]);
+      return '';
+    }
+
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    const channelId = `log-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const source = new EventSource(`/api/task-logs?channel=${encodeURIComponent(channelId)}`);
+    logChannelRef.current = channelId;
+    logChunkBufferRef.current = { stdout: '', stderr: '' };
+    setLiveLogs([]);
+
+    const parseEventData = (event) => {
+      if (!event?.data) {
+        return {};
+      }
+      try {
+        return JSON.parse(event.data);
+      } catch (error) {
+        return {};
+      }
+    };
+
+    const handleInfo = (event) => {
+      const payload = parseEventData(event);
+      if (payload?.message) {
+        appendLogLines([payload.message]);
+      }
+    };
+
+    const handleError = (event) => {
+      const payload = parseEventData(event);
+      if (payload?.message) {
+        appendLogLines([`[error] ${payload.message}`]);
+      }
+    };
+
+    const handleCommandStart = (event) => {
+      const payload = parseEventData(event);
+      const index = typeof payload?.index === 'number' ? payload.index + 1 : null;
+      const commandLine =
+        typeof payload?.commandLine === 'string' && payload.commandLine.trim().length > 0
+          ? payload.commandLine
+          : typeof payload?.command === 'string'
+            ? payload.command
+            : '';
+      const label = index ? `[${index}] ` : '';
+      const prefix = commandLine ? `$ ${commandLine}` : 'コマンドを開始します。';
+      appendLogLines([`${label}${prefix}`]);
+    };
+
+    const handleCommandEnd = (event) => {
+      const payload = parseEventData(event);
+      const index = typeof payload?.index === 'number' ? payload.index + 1 : null;
+      const timedOut = Boolean(payload?.timedOut);
+      const exitCode = typeof payload?.exitCode === 'number' ? payload.exitCode : payload?.exitCode;
+      let suffix;
+      if (timedOut) {
+        suffix = 'タイムアウトしました。';
+      } else if (exitCode === null || exitCode === undefined) {
+        suffix = '終了コード: 不明';
+      } else {
+        suffix = `終了コード: ${exitCode}`;
+      }
+      const label = index ? `[${index}] ` : '';
+      appendLogLines([`${label}${suffix}`]);
+    };
+
+    const handleCommandSkip = (event) => {
+      const payload = parseEventData(event);
+      const index = typeof payload?.index === 'number' ? payload.index + 1 : null;
+      const reason = payload?.reason || 'skipped';
+      const commandLine =
+        typeof payload?.commandLine === 'string' && payload.commandLine.trim().length > 0
+          ? payload.commandLine
+          : typeof payload?.command === 'string'
+            ? payload.command
+            : '';
+      const reasonText =
+        reason === 'dry_run'
+          ? 'ドライランのためスキップ'
+          : reason === 'previous_step_failed'
+            ? '前のステップが失敗したためスキップ'
+            : reason === 'no_op_command'
+              ? '実行対象のコマンドがありません'
+              : `スキップ (${reason})`;
+      const label = index ? `[${index}] ` : '';
+      const suffix = commandLine ? `: ${commandLine}` : '';
+      appendLogLines([`${label}${reasonText}${suffix}`]);
+    };
+
+    const handleLog = (event) => {
+      const payload = parseEventData(event);
+      if (!payload) {
+        return;
+      }
+      const stream = payload.stream === 'stderr' ? 'stderr' : 'stdout';
+      const text = typeof payload.text === 'string' ? payload.text : '';
+      appendLogChunk(stream, text);
+    };
+
+    source.addEventListener('info', handleInfo);
+    source.addEventListener('error', handleError);
+    source.addEventListener('command_start', handleCommandStart);
+    source.addEventListener('command_end', handleCommandEnd);
+    source.addEventListener('command_skip', handleCommandSkip);
+    source.addEventListener('log', handleLog);
+    source.addEventListener('end', () => {
+      flushPendingChunks();
+    });
+    source.onerror = () => {
+      flushPendingChunks();
+    };
+
+    eventSourceRef.current = source;
+    return channelId;
+  }, [appendLogChunk, appendLogLines, flushPendingChunks]);
+
+  useEffect(
+    () => () => {
+      stopLogStream();
+    },
+    [stopLogStream]
+  );
+
   const resetForm = useCallback(() => {
     setTask('');
     setSelectedFiles([]);
@@ -80,6 +280,10 @@ export function useTaskWorkflow() {
       setError('');
 
       const params = new URLSearchParams();
+      const logChannel = startLogStream();
+      if (logChannel) {
+        params.append('logChannel', logChannel);
+      }
       if (debugEnabled) {
         params.append('debug', 'verbose');
       }
@@ -177,10 +381,11 @@ export function useTaskWorkflow() {
       } catch (submitError) {
         setError(submitError.message);
       } finally {
+        stopLogStream();
         setIsSubmitting(false);
       }
     },
-    [task, selectedFiles, debugEnabled, dryRun]
+    [task, selectedFiles, debugEnabled, dryRun, startLogStream, stopLogStream]
   );
 
   const latestEntry = useMemo(() => {
@@ -220,6 +425,10 @@ export function useTaskWorkflow() {
     setComplaintError('');
 
     const params = new URLSearchParams();
+    const logChannel = startLogStream();
+    if (logChannel) {
+      params.append('logChannel', logChannel);
+    }
     if (debugEnabled) {
       params.append('debug', 'verbose');
     }
@@ -310,6 +519,7 @@ export function useTaskWorkflow() {
     } catch (submitError) {
       setComplaintError(submitError.message);
     } finally {
+      stopLogStream();
       setIsSubmitting(false);
       setIsSubmittingComplaint(false);
     }
@@ -320,7 +530,9 @@ export function useTaskWorkflow() {
     debugEnabled,
     dryRun,
     isSubmitting,
-    isSubmittingComplaint
+    isSubmittingComplaint,
+    startLogStream,
+    stopLogStream
   ]);
 
   const progressPercent = useMemo(() => {
@@ -379,6 +591,7 @@ export function useTaskWorkflow() {
     isSubmittingComplaint,
     handleComplaintSubmit,
     handleComplaintChange,
-    setError
+    setError,
+    liveLogs
   };
 }

@@ -32,6 +32,10 @@ export class CommandExecutor {
     const cwd = options.cwd || process.cwd();
     const publicRoot = options.publicRoot ? path.resolve(options.publicRoot) : null;
     const dryRun = Boolean(options.dryRun);
+    const onCommandStart = typeof options.onCommandStart === 'function' ? options.onCommandStart : null;
+    const onCommandOutput = typeof options.onCommandOutput === 'function' ? options.onCommandOutput : null;
+    const onCommandEnd = typeof options.onCommandEnd === 'function' ? options.onCommandEnd : null;
+    const onCommandSkip = typeof options.onCommandSkip === 'function' ? options.onCommandSkip : null;
 
     const allOutputs = this.collectOutputs(plan.steps);
     await this.ensureOutputDirectories(allOutputs);
@@ -52,11 +56,29 @@ export class CommandExecutor {
       });
 
       if (skipReason) {
+        if (onCommandSkip) {
+          onCommandSkip({ index, step, reason: skipReason });
+        }
         stepResults.push(this.createSkippedResult(step, skipReason));
         continue;
       }
 
-      const { exitCode, stdout, stderr, timedOut } = await this.spawnProcess(step.command, step.arguments, cwd);
+      if (onCommandStart) {
+        onCommandStart({ index, step });
+      }
+
+      const { exitCode, stdout, stderr, timedOut } = await this.spawnProcess(step.command, step.arguments, cwd, {
+        onStdout: onCommandOutput
+          ? (chunk) => {
+              onCommandOutput({ index, step, stream: 'stdout', text: chunk });
+            }
+          : null,
+        onStderr: onCommandOutput
+          ? (chunk) => {
+              onCommandOutput({ index, step, stream: 'stderr', text: chunk });
+            }
+          : null
+      });
 
       const executedResult = this.createExecutedResult(step, exitCode, stdout, stderr, timedOut);
       stepResults.push(executedResult);
@@ -66,6 +88,10 @@ export class CommandExecutor {
 
       aggregatedStdout = this.appendSectionOutput(aggregatedStdout, index, step, stdout);
       aggregatedStderr = this.appendSectionOutput(aggregatedStderr, index, step, stderr);
+
+      if (onCommandEnd) {
+        onCommandEnd({ index, step, exitCode, timedOut });
+      }
 
       if (timedOut || (exitCode !== null && exitCode !== 0)) {
         encounteredFailure = true;
@@ -240,7 +266,7 @@ export class CommandExecutor {
    * @param {string} cwd
    * @returns {Promise<{exitCode: number|null, stdout: string, stderr: string, timedOut: boolean}>}
    */
-  spawnProcess(command, args, cwd) {
+  spawnProcess(command, args, cwd, hooks = {}) {
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
         cwd,
@@ -260,11 +286,19 @@ export class CommandExecutor {
       }, this.timeoutMs);
 
       child.stdout.on('data', (chunk) => {
-        stdout += chunk.toString();
+        const text = chunk.toString();
+        stdout += text;
+        if (typeof hooks.onStdout === 'function') {
+          hooks.onStdout(text);
+        }
       });
 
       child.stderr.on('data', (chunk) => {
-        stderr += chunk.toString();
+        const text = chunk.toString();
+        stderr += text;
+        if (typeof hooks.onStderr === 'function') {
+          hooks.onStderr(text);
+        }
       });
 
       child.on('error', (error) => {
