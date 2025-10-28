@@ -110,7 +110,7 @@ export default function TaskForm({
 
         <div className="form-actions">
           <button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '送信中...' : '送信する'}
+            {isSubmitting ? '処理中…' : '送信する'}
           </button>
           <button type="button" onClick={onReset} disabled={isSubmitting}>
             リセット
