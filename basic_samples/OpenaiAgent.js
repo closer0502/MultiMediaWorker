@@ -5,7 +5,7 @@ dotenv.config({ path: '.env.local' });
 
 /**
  * @typedef {Object} CommandResponse
- * @property {string} command - コマンド名 (ffmpeg, magick, exiftool, none)
+ * @property {string} command - コマンド名 (ffmpeg, magick, exiftool, yt-dlp, none)
  * @property {string[]} arguments - コマンドの引数配列
  */
 
@@ -35,7 +35,7 @@ export async function getCommandSuggestion(client, userQuery) {
         "content": [
           {
             "type": "input_text",
-            "text": "#あなたはユーザーの求める問題を解決する最適なターミナルコマンドを返答をします。\n#あなたが使えるコマンドは以下のコマンドリストです。\n- ffmpeg\n- magick(ImageMagick)\n- exiftool\n- none (ユーザーの求める問題を解決する上のどのコマンドでも無理な場合)\n\n#返答はJSON schemaに従って返してください。"
+            "text": "#あなたはユーザーの求める問題を解決する最適なターミナルコマンドを返答をします。\n#あなたが使えるコマンドは以下のコマンドリストです。\n- ffmpeg\n- magick(ImageMagick)\n- exiftool\n- yt-dlp\n- none (ユーザーの求める問題を解決する上のどのコマンドでも無理な場合)\n\n#返答はJSON schemaに従って返してください。"
           }
         ]
       },
@@ -59,11 +59,12 @@ export async function getCommandSuggestion(client, userQuery) {
           "properties": {
             "command": {
               "type": "string",
-              "description": "Command name (must be one of: ffmpeg, magick, exiftool, or none).",
+              "description": "Command name (must be one of: ffmpeg, magick, exiftool, yt-dlp, or none).",
               "enum": [
                 "ffmpeg",
                 "magick",
                 "exiftool",
+                "yt-dlp",
                 "none"
               ]
             },

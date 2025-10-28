@@ -1,6 +1,6 @@
 # MultiMediaWorker
 
-MultiMediaWorker は、自然言語のリクエストを ffmpeg / ImageMagick / ExifTool などの CLI コマンドに変換して実行する AI エージェント + Web UI アプリです。エージェントはバックエンドでコマンドを計画・実行し、その結果と生成物をフロントエンドで可視化します。
+MultiMediaWorker は、自然言語のリクエストを ffmpeg / ImageMagick / ExifTool / yt-dlp などの CLI コマンドに変換して実行する AI エージェント + Web UI アプリです。エージェントはバックエンドでコマンドを計画・実行し、その結果と生成物をフロントエンドで可視化します。
 
 ## ディレクトリ構成
 
@@ -24,7 +24,7 @@ storage/                 # アップロードファイルの一時保存 (Git �
 ## 事前準備
 
 - Node.js 18 以降
-- `ffmpeg`, `magick`, `exiftool` などの CLI をローカル環境にインストールし、`PATH` に通す
+- `ffmpeg`, `magick`, `exiftool`, `yt-dlp` などの CLI をローカル環境にインストールし、`PATH` に通す
 - `.env.example` を複製して `.env.local` を作成し、`OPENAI_API_KEY` を設定
 
 ```bash
@@ -115,3 +115,4 @@ npm run preview:client
 1. `backend/src/agent/constants.js` の `DEFAULT_TOOL_DEFINITIONS` にツール情報を追加。
 2. 追加した CLI をホスト環境へインストールし、`PATH` で利用可能にする。
 3. 必要に応じて UI の文言やバリデーションを調整（多くの場合はバックエンドの定義だけで対応可能）。
+

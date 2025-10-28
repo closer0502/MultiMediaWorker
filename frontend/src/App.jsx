@@ -44,7 +44,7 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1>MultiMedia Worker</h1>
-        <p>自然言語で指示すると、実行可能な ffmpeg / ImageMagick / ExifTool コマンドを生成します。</p>
+        <p>自然言語で指示すると、実行可能な ffmpeg / ImageMagick / ExifTool / yt-dlp コマンドを生成します。</p>
       </header>
 
       <main className="content">

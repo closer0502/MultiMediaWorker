@@ -9,7 +9,7 @@
 - `backend/src/server.js` がエントリポイントです。  
   - `.env.local` を読み込み、OpenAI クライアントと CLI ツールを組み合わせた `MediaAgent` を生成。  
   - `MediaAgentServer`（Express アプリ）を起動し、`/api/...` のエンドポイントを公開します。
-- エージェントは **OpenAI Responses API** を使って実行用コマンドを計画し、`ffmpeg` / `magick` / `exiftool` などの CLI を実行して結果を返します。
+- エージェントは **OpenAI Responses API** を使って実行用コマンドを計画し、`ffmpeg` / `magick` / `exiftool` / `yt-dlp` などの CLI を実行して結果を返します。
 
 ---
 
@@ -17,7 +17,7 @@
 
 1. **Node.js 18 以上** をインストールします。  
 2. **CLI ツール** をローカルに用意し、`PATH` で呼び出せるようにしておきます。  
-   - 必須: `ffmpeg`, `magick` (ImageMagick), `exiftool`  
+   - 必須: `ffmpeg`, `magick` (ImageMagick), `exiftool`, `yt-dlp`  
 3. **環境変数ファイル** を作成します。
    ```bash
    cp .env.example .env.local
@@ -119,3 +119,4 @@
 - `README.md` … プロジェクト全体のセットアップや利用コマンドを一覧しています。
 
 このガイドを出発点に、必要な箇所のソースコードへ飛びながら自分の用途に合わせてカスタマイズしてみてください。
+

@@ -45,7 +45,7 @@
 
 /**
  * @typedef {Object} CommandStepPlan
- * @property {'ffmpeg'|'magick'|'exiftool'|'none'} command
+ * @property {'ffmpeg'|'magick'|'exiftool'|'yt-dlp'|'none'} command
  * @property {string[]} arguments
  * @property {string} reasoning
  * @property {CommandOutputPlan[]} outputs

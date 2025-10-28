@@ -92,6 +92,7 @@ async function testCommandExecutorExecutionPaths() {
 async function testToolRegistry() {
   const registry = ToolRegistry.createDefault();
   assert.ok(registry.hasCommand('ffmpeg'));
+  assert.ok(registry.hasCommand('yt-dlp'));
   assert.ok(registry.listCommandIds().includes('none'));
   assert.ok(registry.describeExecutableCommands().every((entry) => entry.id !== 'none'));
 }
