@@ -9,11 +9,13 @@ import runPlannerTests from './agent/planner.test.js';
 import runServerHelperTests from './server/serverHelpers.test.js';
 import runServerHandleTaskRequestTests from './server/handleTaskRequest.test.js';
 import runIndexExportTests from './agent/indexExports.test.js';
+import runCliAvailabilityTests from './system/cliAvailability.test.js';
 
 async function runTests() {
   await ensureTestRoot();
 
   try {
+    await runCliAvailabilityTests();
     await runAgentParsingTests();
     await runAgentValidationTests();
     await runCommandExecutionTests();
