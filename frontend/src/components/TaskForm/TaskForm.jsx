@@ -55,31 +55,25 @@ export default function TaskForm({
           />
         </label>
 
-        <label className="field">
-          <span>ファイルを添付</span>
-          <div className="file-input-row">
-            <input
-              ref={fileInputRef}
-              className="file-input"
-              type="file"
-              multiple
-              onChange={handleFileChange}
-              disabled={isSubmitting}
-            />
-            <button
-              type="button"
-              className="file-input-trigger"
-              onClick={() => fileInputRef.current && fileInputRef.current.click()}
-              disabled={isSubmitting}
-            >
-              ファイル選択
-            </button>
-          </div>
-        </label>
-
-        {selectedFiles.length > 0 && (
-          <FilePreviewList files={selectedFiles} onClear={onClearFiles} disabled={isSubmitting} />
-        )}
+        <div className="field">
+          <label htmlFor="task-form-file-input">ファイルを添付</label>
+          <input
+            ref={fileInputRef}
+            id="task-form-file-input"
+            className="file-input"
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            disabled={isSubmitting}
+            aria-label="ファイルを添付"
+          />
+          <FilePreviewList
+            files={selectedFiles}
+            onClear={onClearFiles}
+            onAdd={() => fileInputRef.current && fileInputRef.current.click()}
+            disabled={isSubmitting}
+          />
+        </div>
 
         <div className={`field options debug-options ${showDebugOptions ? 'is-expanded' : 'is-collapsed'}`}>
           <label className="debug-options-header">

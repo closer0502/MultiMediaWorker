@@ -553,14 +553,27 @@ video.output-preview-media {
 }
 
 .file-preview-header {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
 
-.file-preview ul {
-  list-style: none;
-  padding: 0;
+  .file-preview-header-info {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .file-preview-total-size {
+    font-size: 0.8rem;
+    color: #9eaec5;
+  }
+
+  .file-preview ul {
+    list-style: none;
+    padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -610,16 +623,39 @@ video.output-preview-media {
 
 .file-preview-name {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-.file-preview-size {
-  font-size: 0.8rem;
-  color: #9eaec5;
-  flex-shrink: 0;
-}
+  .file-preview-size {
+    font-size: 0.8rem;
+    color: #9eaec5;
+    flex-shrink: 0;
+  }
+
+  .file-preview-empty {
+    margin: 0;
+    padding: 1.5rem 0;
+    text-align: center;
+    font-size: 0.9rem;
+    color: #9eaec5;
+  }
+
+  .file-preview-footer {
+    display: flex;
+    justify-content: center;
+  }
+
+  .file-preview-add-button {
+    width: 100%;
+    justify-content: center;
+    padding: 0.65rem 1.25rem;
+  }
+
+  .file-preview.is-empty .file-preview-footer {
+    padding-top: 0;
+  }
 
 .result-view {
   display: flex;
