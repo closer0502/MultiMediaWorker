@@ -535,14 +535,6 @@ export function useTaskWorkflow() {
     stopLogStream
   ]);
 
-  const progressPercent = useMemo(() => {
-    if (!isSubmitting) {
-      return 0;
-    }
-    const currentStep = Math.min(progressStage + 1, PROGRESS_STEPS.length);
-    return Math.min(100, Math.round((currentStep / PROGRESS_STEPS.length) * 100));
-  }, [progressStage, isSubmitting]);
-
   const complaintTextTrimmed = complaintText.trim();
   const canSubmitRevision = Boolean(!isSubmitting && latestEntry && latestOutputs.length > 0);
   const complaintButtonDisabled =
@@ -578,7 +570,6 @@ export function useTaskWorkflow() {
     dryRun,
     setDryRun,
     progressStage,
-    progressPercent,
     handleSubmit,
     resetForm,
     latestEntry,

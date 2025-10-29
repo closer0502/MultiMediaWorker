@@ -26,7 +26,6 @@ export default function App() {
     dryRun,
     setDryRun,
     progressStage,
-    progressPercent,
     handleSubmit,
     resetForm,
     latestEntry,
@@ -45,7 +44,6 @@ export default function App() {
 
   const progressModalVisible = progressPreview.enabled ? true : isSubmitting;
   const progressModalStage = progressPreview.enabled ? progressPreview.stage : progressStage;
-  const progressModalPercent = progressPreview.enabled ? progressPreview.percent : progressPercent;
   const progressModalLogs = progressPreview.enabled ? progressPreview.logs : liveLogs;
 
   return (
@@ -105,9 +103,7 @@ export default function App() {
         )}
       </main>
 
-      {progressModalVisible && (
-        <ProgressModal stage={progressModalStage} percent={progressModalPercent} logs={progressModalLogs} />
-      )}
+      {progressModalVisible && <ProgressModal stage={progressModalStage} logs={progressModalLogs} />}
     </div>
   );
 }

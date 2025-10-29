@@ -18,14 +18,6 @@ const parseStage = (params, maxStage) => {
   return clamp(DEFAULT_STAGE, 0, maxStage);
 };
 
-const parsePercent = (params, defaultPercent) => {
-  const value = Number.parseInt(params.get('percent') ?? '', 10);
-  if (Number.isFinite(value)) {
-    return clamp(value, 0, 100);
-  }
-  return defaultPercent;
-};
-
 const parseLogs = (params) => {
   const raw = params.get('logs');
   if (!raw) {
@@ -53,16 +45,11 @@ export function useProgressPreview() {
 
     const maxStage = Math.max(PROGRESS_STEPS.length - 1, 0);
     const stage = parseStage(params, maxStage);
-    const currentStep = Math.min(stage + 1, PROGRESS_STEPS.length);
-    const derivedPercent =
-      PROGRESS_STEPS.length === 0 ? 0 : Math.min(100, Math.round((currentStep / PROGRESS_STEPS.length) * 100));
-    const percent = parsePercent(params, derivedPercent);
     const logs = parseLogs(params);
 
     return {
       enabled: true,
       stage,
-      percent,
       logs
     };
   }, []);
