@@ -6,6 +6,7 @@ import ProgressModal from './components/ProgressModal.jsx';
 import ResultView from './components/result/ResultView.jsx';
 import TaskForm from './components/TaskForm/TaskForm.jsx';
 import { useTaskWorkflow } from './hooks/useTaskWorkflow.js';
+import { useProgressPreview } from './hooks/useProgressPreview.js';
 
 export default function App() {
   const {
@@ -40,6 +41,12 @@ export default function App() {
     handleComplaintChange,
     liveLogs
   } = useTaskWorkflow();
+  const progressPreview = useProgressPreview();
+
+  const progressModalVisible = progressPreview.enabled ? true : isSubmitting;
+  const progressModalStage = progressPreview.enabled ? progressPreview.stage : progressStage;
+  const progressModalPercent = progressPreview.enabled ? progressPreview.percent : progressPercent;
+  const progressModalLogs = progressPreview.enabled ? progressPreview.logs : liveLogs;
 
   return (
     <div className="app">
@@ -98,7 +105,9 @@ export default function App() {
         )}
       </main>
 
-      {isSubmitting && <ProgressModal stage={progressStage} percent={progressPercent} logs={liveLogs} />}
+      {progressModalVisible && (
+        <ProgressModal stage={progressModalStage} percent={progressModalPercent} logs={progressModalLogs} />
+      )}
     </div>
   );
 }

@@ -52,6 +52,13 @@ npm run dev:client
 - バックエンド: http://localhost:3001
 - フロントエンド: http://localhost:5173 (バックエンドへプロキシ)
 
+## 進捗モーダルのプレビュー用URL
+
+- `npm run dev:client` を起動し、`http://localhost:5173/?progressPreview=1` にアクセスすると、進捗モーダルだけを表示した状態で確認できます。
+- progressPreview=1 は「プレビューを有効にする」ことだけを示すフラグです。値の「1」自体に段階や割合といった意味はなく、「このクエリが付いている＝進捗モーダルをプレビュー表示する」というスイッチとして扱っています。
+- `stage` (0 〜 `PROGRESS_STEPS.length - 1`) や `percent` (0-100)、`logs` (`|` 区切りの文字列) をクエリで指定すると、表示内容を個別に調整できます。
+
+
 ## テスト & ビルド
 
 ```bash
