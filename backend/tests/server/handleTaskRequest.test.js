@@ -46,25 +46,34 @@ async function testMediaAgentServerHandleTaskRequestSuccess() {
   await fs.mkdir(sessionDir, { recursive: true });
   await fs.mkdir(inputDir, { recursive: true });
 
+  const uploadedFiles = [
+    {
+      originalname: 'image.png',
+      path: path.join(baseDir, 'uploads', 'image.png'),
+      size: 42,
+      mimetype: 'image/png'
+    },
+    {
+      originalname: 'clip.mp4',
+      path: path.join(baseDir, 'uploads', 'clip.mp4'),
+      size: 84,
+      mimetype: 'video/mp4'
+    }
+  ];
   const req = {
     body: { task: 'Process media' },
     query: { dryRun: 'true', debug: 'verbose' },
-    files: [
-      {
-        originalname: 'image.png',
-        path: path.join(baseDir, 'uploads', 'image.png'),
-        size: 42,
-        mimetype: 'image/png'
-      }
-    ],
+    files: uploadedFiles,
     agentSession: {
       id: 'session-success',
       inputDir,
       outputDir: sessionDir
     }
   };
-  await fs.mkdir(path.dirname(req.files[0].path), { recursive: true });
-  await fs.writeFile(req.files[0].path, 'binary');
+  await fs.mkdir(path.dirname(uploadedFiles[0].path), { recursive: true });
+  for (const file of uploadedFiles) {
+    await fs.writeFile(file.path, 'binary');
+  }
 
   const res = createMockResponse();
   await server.handleTaskRequest(req, res);
@@ -75,12 +84,13 @@ async function testMediaAgentServerHandleTaskRequestSuccess() {
   assert.equal(res.body.sessionId, 'session-success');
   assert.equal(res.body.plan.steps.length, 0);
   assert.equal(res.body.phases.length, 2);
-  assert.equal(res.body.uploadedFiles.length, 1);
+  assert.equal(res.body.uploadedFiles.length, 2);
   assert.ok(res.body.debug);
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].request.task, 'Process media');
   assert.equal(calls[0].options.dryRun, true);
+  assert.equal(calls[0].request.files.length, 2);
   assert.equal(calls[0].options.includeRawResponse, true);
 }
 

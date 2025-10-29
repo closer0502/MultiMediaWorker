@@ -28,7 +28,14 @@ export default function TaskForm({
 
   const handleFileChange = useCallback(
     (event) => {
-      onFilesSelected(Array.from(event.target.files || []));
+      const { files } = event.target;
+      const nextFiles = Array.from(files || []);
+      if (nextFiles.length > 0) {
+        onFilesSelected(nextFiles);
+      }
+      if (event.target) {
+        event.target.value = '';
+      }
     },
     [onFilesSelected]
   );

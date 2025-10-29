@@ -4,6 +4,21 @@ import { PROGRESS_ROTATION_MS, PROGRESS_STEPS } from '../constants/app.js';
 const INITIAL_HISTORY = [];
 const LOG_LINE_LIMIT = 500;
 
+/**
+ * Create a stable identity string for a File-like object.
+ * @param {File|{name?: string, size?: number, lastModified?: number}} file
+ * @returns {string}
+ */
+function createFileIdentityKey(file) {
+  if (!file || typeof file !== 'object') {
+    return 'unknown';
+  }
+  const name = typeof file.name === 'string' ? file.name : '';
+  const size = typeof file.size === 'number' ? file.size : 0;
+  const lastModified = typeof file.lastModified === 'number' ? file.lastModified : 0;
+  return `${name}::${size}::${lastModified}`;
+}
+
 export function useTaskWorkflow() {
   const [task, setTask] = useState('');
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -259,7 +274,24 @@ export function useTaskWorkflow() {
   }, []);
 
   const handleFilesSelected = useCallback((files) => {
-    setSelectedFiles(files);
+    setSelectedFiles((previous) => {
+      if (!Array.isArray(files) || files.length === 0) {
+        return previous;
+      }
+      const existingKeys = new Set(previous.map((file) => createFileIdentityKey(file)));
+      const nextFiles = [...previous];
+      let appended = false;
+      for (const file of files) {
+        const key = createFileIdentityKey(file);
+        if (existingKeys.has(key)) {
+          continue;
+        }
+        existingKeys.add(key);
+        nextFiles.push(file);
+        appended = true;
+      }
+      return appended ? nextFiles : previous;
+    });
   }, []);
 
   const handleClearFiles = useCallback(() => {
