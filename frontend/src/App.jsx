@@ -17,6 +17,8 @@ export default function App() {
     handleClearFiles,
     fileInputRef,
     isSubmitting,
+    planStatus,
+    planError,
     error,
     history,
     debugEnabled,
@@ -38,6 +40,7 @@ export default function App() {
     isSubmittingComplaint,
     handleComplaintSubmit,
     handleComplaintChange,
+    handleRetryFromError,
     liveLogs
   } = useTaskWorkflow();
   const progressPreview = useProgressPreview();
@@ -45,6 +48,13 @@ export default function App() {
   const progressModalVisible = progressPreview.enabled ? true : isSubmitting;
   const progressModalStage = progressPreview.enabled ? progressPreview.stage : progressStage;
   const progressModalLogs = progressPreview.enabled ? progressPreview.logs : liveLogs;
+
+  const showErrorBanner =
+    !isSubmitting &&
+    planStatus === 'failed' &&
+    Boolean(planError?.message || (latestEntry && latestEntry.status === 'failed'));
+  const errorBannerMessage =
+    planError?.message || latestEntry?.error || error || 'プラン実行に失敗しました。';
 
   return (
     <div className="app">
@@ -78,6 +88,9 @@ export default function App() {
         <LatestOutputsPanel
           isSubmitting={isSubmitting}
           outputs={latestOutputs}
+          showErrorBanner={showErrorBanner}
+          errorMessage={errorBannerMessage}
+          onRetryFromError={handleRetryFromError}
           complaintText={complaintText}
           complaintError={complaintError}
           helperMessage={complaintHelperMessage}

@@ -25,6 +25,9 @@ export function useTaskWorkflow() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [history, setHistory] = useState(INITIAL_HISTORY);
+  const [planStatus, setPlanStatus] = useState('idle');
+  const [planError, setPlanError] = useState(null);
+  const [lastRequest, setLastRequest] = useState(null);
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [showDebugOptions, setShowDebugOptions] = useState(true);
   const [dryRun, setDryRun] = useState(false);
@@ -268,6 +271,9 @@ export function useTaskWorkflow() {
   const resetForm = useCallback(() => {
     setTask('');
     setSelectedFiles([]);
+    setPlanStatus('idle');
+    setPlanError(null);
+    setLastRequest(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -301,37 +307,65 @@ export function useTaskWorkflow() {
     }
   }, []);
 
-  const handleSubmit = useCallback(
-    async (event) => {
-      event.preventDefault();
-      if (!task.trim()) {
-        setError('タスク内容を入力してください。');
-        return;
+  const submitTaskRequest = useCallback(
+    async ({ taskInput, files, options }) => {
+      const trimmedTask = typeof taskInput === 'string' ? taskInput.trim() : '';
+      const fileList = Array.isArray(files) ? [...files] : [];
+      const normalizedOptions = {
+        debugEnabled: Boolean(options?.debugEnabled),
+        dryRun: Boolean(options?.dryRun)
+      };
+
+      if (!trimmedTask) {
+        const validationMessage = 'タスク内容を入力してください。';
+        setError(validationMessage);
+        setPlanStatus('failed');
+        setPlanError({
+          message: validationMessage,
+          recordedAt: new Date().toISOString(),
+          payload: null,
+          request: {
+            task: trimmedTask,
+            files: fileList,
+            options: normalizedOptions
+          }
+        });
+        return false;
       }
+
       setIsSubmitting(true);
       setError('');
+      setPlanStatus('running');
+      setPlanError(null);
+
+      const requestSnapshot = {
+        task: trimmedTask,
+        files: fileList,
+        options: normalizedOptions
+      };
+      setLastRequest(requestSnapshot);
 
       const params = new URLSearchParams();
       const logChannel = startLogStream();
       if (logChannel) {
         params.append('logChannel', logChannel);
       }
-      if (debugEnabled) {
+      if (normalizedOptions.debugEnabled) {
         params.append('debug', 'verbose');
       }
-      if (dryRun) {
+      if (normalizedOptions.dryRun) {
         params.append('dryRun', 'true');
       }
 
       const url = `/api/tasks${params.toString() ? `?${params.toString()}` : ''}`;
       const formData = new FormData();
-      formData.append('task', task);
-      selectedFiles.forEach((file) => {
+      formData.append('task', trimmedTask);
+      fileList.forEach((file) => {
         formData.append('files', file);
       });
 
       const submittedAt = new Date().toISOString();
-      const pendingUploads = selectedFiles.map((file, index) => ({
+      const pendingUploads = fileList.map((file, index) => ({
         id: `local-${index}`,
         originalName: file.name,
         size: file.size,
@@ -345,81 +379,169 @@ export function useTaskWorkflow() {
         });
 
         const payload = await response.json().catch(() => null);
+        const recordedAt = payload?.submittedAt || submittedAt;
 
         if (!response.ok) {
           const message = payload?.error || '実行中に問題が発生しました。';
+          const detail = payload?.detail || message;
           setError(message);
+          setPlanStatus('failed');
+          const failureContext = {
+            message: detail,
+            payload,
+            recordedAt,
+            request: requestSnapshot
+          };
+          setPlanError(failureContext);
           if (payload) {
-            const recordedAt = payload.submittedAt || submittedAt;
             setHistory((prev) => [
               {
                 id: payload.sessionId || `error-${Date.now()}`,
                 submittedAt: recordedAt,
-                task: payload.task || task,
+                task: payload.task || trimmedTask,
                 plan: payload.plan || null,
                 rawPlan: payload.rawPlan ?? payload.plan ?? null,
                 result: payload.result || null,
                 phases: payload.phases || [],
                 uploadedFiles: payload.uploadedFiles || pendingUploads,
                 status: payload.status || 'failed',
-                error: payload.detail || message,
+                error: payload.detail || detail,
                 debug: payload.debug || null,
                 responseText: payload.responseText ?? null,
                 parentSessionId: payload.parentSessionId ?? null,
                 complaint: payload.complaint ?? null,
                 requestOptions: {
-                  debug: debugEnabled,
-                  verbose: debugEnabled,
-                  dryRun
+                  debug: normalizedOptions.debugEnabled,
+                  verbose: normalizedOptions.debugEnabled,
+                  dryRun: normalizedOptions.dryRun
                 }
               },
               ...prev
             ]);
           }
-          return;
+          return false;
         }
 
         if (!payload) {
-          throw new Error('サーバーから空の応答が返されました。');
+          throw new Error('サーバーからの応答を解析できませんでした。');
         }
 
-        const recordedAt = payload.submittedAt || submittedAt;
+        const finalStatus = payload.status || 'success';
+        const detailMessage = payload.detail || payload.error || '';
+
         setHistory((prev) => [
           {
             id: payload.sessionId,
             submittedAt: recordedAt,
-            task: payload.task || task,
+            task: payload.task || trimmedTask,
             plan: payload.plan,
             rawPlan: payload.rawPlan ?? payload.plan ?? null,
             result: payload.result,
             phases: payload.phases || [],
             uploadedFiles: payload.uploadedFiles || pendingUploads,
-            status: payload.status || 'success',
+            status: finalStatus,
             error: payload.detail || null,
             debug: payload.debug || null,
             responseText: payload.responseText ?? null,
             parentSessionId: payload.parentSessionId ?? null,
             complaint: payload.complaint ?? null,
             requestOptions: {
-              debug: debugEnabled,
-              verbose: debugEnabled,
-              dryRun
+              debug: normalizedOptions.debugEnabled,
+              verbose: normalizedOptions.debugEnabled,
+              dryRun: normalizedOptions.dryRun
             }
           },
           ...prev
         ]);
-        setComplaintText('');
-        setComplaintError('');
+
+        if (finalStatus === 'success') {
+          setComplaintText('');
+          setComplaintError('');
+          setPlanStatus('succeeded');
+          setPlanError(null);
+          return true;
+        }
+
+        const failureMessage = detailMessage || 'プランの実行に失敗しました。';
+        setError(failureMessage);
+        setPlanStatus('failed');
+        setPlanError({
+          message: failureMessage,
+          payload,
+          recordedAt,
+          request: requestSnapshot
+        });
+        return false;
       } catch (submitError) {
-        setError(submitError.message);
+        const message = submitError?.message || '実行中にエラーが発生しました。';
+        setError(message);
+        const recordedAt = new Date().toISOString();
+        setPlanStatus('failed');
+        setPlanError({
+          message,
+          payload: null,
+          recordedAt,
+          request: requestSnapshot
+        });
+        return false;
       } finally {
         stopLogStream();
         setIsSubmitting(false);
       }
     },
-    [task, selectedFiles, debugEnabled, dryRun, startLogStream, stopLogStream]
+    [startLogStream, stopLogStream, setHistory, setComplaintText, setComplaintError]
   );
 
+  const handleSubmit = useCallback(
+    async (event) => {
+      event.preventDefault();
+      await submitTaskRequest({
+        taskInput: task,
+        files: selectedFiles,
+        options: {
+          debugEnabled,
+          dryRun
+        }
+      });
+    },
+    [task, selectedFiles, debugEnabled, dryRun, submitTaskRequest]
+  );
+
+  const handleRetryFromError = useCallback(async () => {
+    if (isSubmitting) {
+      return;
+    }
+    const snapshot = planError?.request || lastRequest;
+    if (!snapshot || !snapshot.task) {
+      return;
+    }
+
+    const previousFiles = Array.isArray(snapshot.files) ? [...snapshot.files] : [];
+    const normalizedOptions = {
+      debugEnabled: Boolean(snapshot.options?.debugEnabled),
+      dryRun: Boolean(snapshot.options?.dryRun)
+    };
+
+    setTask(snapshot.task);
+    setSelectedFiles(previousFiles);
+    setDebugEnabled(normalizedOptions.debugEnabled);
+    setDryRun(normalizedOptions.dryRun);
+
+    await submitTaskRequest({
+      taskInput: snapshot.task,
+      files: previousFiles,
+      options: normalizedOptions
+    });
+  }, [
+    isSubmitting,
+    planError,
+    lastRequest,
+    submitTaskRequest,
+    setSelectedFiles,
+    setDebugEnabled,
+    setDryRun,
+    setTask
+  ]);
   const latestEntry = useMemo(() => {
     if (isSubmitting) {
       return null;
@@ -593,6 +715,9 @@ export function useTaskWorkflow() {
     handleClearFiles,
     fileInputRef,
     isSubmitting,
+    planStatus,
+    planError,
+    handleRetryFromError,
     error,
     history,
     debugEnabled,
