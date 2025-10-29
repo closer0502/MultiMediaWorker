@@ -31,11 +31,13 @@ export class MediaAgentServer {
 
     this.app = express();
     this.upload = this.createUploader();
+    this.logStreams = new Map();
 
     this.prepareSession = this.prepareSession.bind(this);
     this.handleTaskRequest = this.handleTaskRequest.bind(this);
     this.handleRevisionRequest = this.handleRevisionRequest.bind(this);
     this.handleGetTools = this.handleGetTools.bind(this);
+    this.handleTaskLogStream = this.handleTaskLogStream.bind(this);
   }
 
   /**
@@ -91,8 +93,9 @@ export class MediaAgentServer {
 
   /**
    * APIルートとエラーハンドラを設定
-   */
+  */
   configureRoutes() {
+    this.app.get('/api/task-logs', this.handleTaskLogStream);
     this.app.get('/api/tools', this.handleGetTools);
     this.app.post('/api/tasks', this.prepareSession, this.upload.array('files'), this.handleTaskRequest);
     this.app.post('/api/revisions', this.prepareSession, this.handleRevisionRequest);
@@ -154,14 +157,27 @@ export class MediaAgentServer {
    * @param {ExpressResponse} res レスポンス
    */
   async handleTaskRequest(req, res) {
+    const logChannel = this.extractLogChannel(req);
+    if (logChannel) {
+      this.waitForLogChannel(logChannel).catch(() => {});
+    }
+
     const task = (req.body?.task || '').trim();
     if (!task) {
+      if (logChannel) {
+        this.sendLogMessage(logChannel, 'タスク内容が空のため実行を中断しました。');
+        this.closeLogStream(logChannel, { status: 'error' });
+      }
       res.status(400).json({ error: 'task フィールドは必須です。' });
       return;
     }
 
     const session = req.agentSession;
     if (!session) {
+      if (logChannel) {
+        this.sendLogError(logChannel, 'セッションの初期化に失敗しました。');
+        this.closeLogStream(logChannel, { status: 'error' });
+      }
       res.status(500).json({ error: 'セッションが初期化されていません。' });
       return;
     }
@@ -196,12 +212,19 @@ export class MediaAgentServer {
     requestPhase.meta.revision = false;
 
     try {
+      if (logChannel) {
+        await this.waitForLogChannel(logChannel);
+        this.sendLogMessage(logChannel, 'タスクを受け付けました。コマンドプランを生成しています…');
+      }
+
+      const commandLogHandlers = logChannel ? this.createCommandLogHandlers(logChannel) : {};
       const agentResponse = await this.agent.runTask(agentRequest, {
         cwd: session.inputDir,
         publicRoot: this.publicRoot,
         dryRun,
         debug: debugMode.enabled,
-        includeRawResponse: debugMode.includeRaw
+        includeRawResponse: debugMode.includeRaw,
+        ...commandLogHandlers
       });
 
       const phases = [requestPhase, ...agentResponse.phases];
@@ -221,6 +244,11 @@ export class MediaAgentServer {
         complaintContext: null
       });
       await this.writeSessionRecord(record);
+
+      if (logChannel) {
+        this.sendLogMessage(logChannel, 'タスクが完了しました。');
+        this.closeLogStream(logChannel, { status: 'success' });
+      }
 
       res.json({
         status: 'success',
@@ -262,6 +290,12 @@ export class MediaAgentServer {
       });
       await this.writeSessionRecord(record);
 
+      if (logChannel) {
+        const message = error?.message || 'タスクの処理中にエラーが発生しました。';
+        this.sendLogError(logChannel, message);
+        this.closeLogStream(logChannel, { status: 'error' });
+      }
+
       res.status(500).json({
         status: 'failed',
         sessionId: session.id,
@@ -286,26 +320,47 @@ export class MediaAgentServer {
    * @param {ExpressResponse} res レスポンス
    */
   async handleRevisionRequest(req, res) {
+    const logChannel = this.extractLogChannel(req);
+    if (logChannel) {
+      this.waitForLogChannel(logChannel).catch(() => {});
+    }
+
     const baseSessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId.trim() : '';
     const complaint = typeof req.body?.complaint === 'string' ? req.body.complaint.trim() : '';
 
     if (!baseSessionId) {
+      if (logChannel) {
+        this.sendLogError(logChannel, 'セッションIDが指定されていません。');
+        this.closeLogStream(logChannel, { status: 'error' });
+      }
       res.status(400).json({ error: 'sessionId フィールドは必須です。' });
       return;
     }
     if (!complaint) {
+      if (logChannel) {
+        this.sendLogMessage(logChannel, 'クレーム内容が空のため再編集を中断しました。');
+        this.closeLogStream(logChannel, { status: 'error' });
+      }
       res.status(400).json({ error: 'complaint フィールドは必須です。' });
       return;
     }
 
     const session = req.agentSession;
     if (!session) {
+      if (logChannel) {
+        this.sendLogError(logChannel, 'セッションの初期化に失敗しました。');
+        this.closeLogStream(logChannel, { status: 'error' });
+      }
       res.status(500).json({ error: 'セッションが初期化されていません。' });
       return;
     }
 
     const baseRecord = await this.readSessionRecord(baseSessionId);
     if (!baseRecord) {
+      if (logChannel) {
+        this.sendLogError(logChannel, '指定されたセッションが見つかりません。');
+        this.closeLogStream(logChannel, { status: 'error' });
+      }
       res.status(404).json({ error: '指定されたセッションが見つかりません。' });
       return;
     }
@@ -341,12 +396,19 @@ export class MediaAgentServer {
     requestPhase.meta.revisionFileCount = revisionFiles.length;
 
     try {
+      if (logChannel) {
+        await this.waitForLogChannel(logChannel);
+        this.sendLogMessage(logChannel, '再編集リクエストを受け付けました。コマンドプランを生成しています…');
+      }
+
+      const commandLogHandlers = logChannel ? this.createCommandLogHandlers(logChannel) : {};
       const agentResponse = await this.agent.runTask(agentRequest, {
         cwd: session.inputDir,
         publicRoot: this.publicRoot,
         dryRun,
         debug: debugMode.enabled,
-        includeRawResponse: debugMode.includeRaw
+        includeRawResponse: debugMode.includeRaw,
+        ...commandLogHandlers
       });
 
       const phases = [requestPhase, ...agentResponse.phases];
@@ -372,6 +434,11 @@ export class MediaAgentServer {
         followUpSessionId: session.id,
         status: 'success'
       });
+
+      if (logChannel) {
+        this.sendLogMessage(logChannel, '再編集タスクが完了しました。');
+        this.closeLogStream(logChannel, { status: 'success' });
+      }
 
       res.json({
         status: 'success',
@@ -420,6 +487,12 @@ export class MediaAgentServer {
         error: error.message
       });
 
+      if (logChannel) {
+        const message = error?.message || '再編集処理中にエラーが発生しました。';
+        this.sendLogError(logChannel, message);
+        this.closeLogStream(logChannel, { status: 'error' });
+      }
+
       res.status(500).json({
         status: 'failed',
         sessionId: session.id,
@@ -436,6 +509,240 @@ export class MediaAgentServer {
         submittedAt
       });
     }
+  }
+
+  /**
+   * SSEログチャンネル用のIDを取得する。
+   * @param {ExpressRequest} req
+   * @returns {string}
+   */
+  extractLogChannel(req) {
+    const fromQuery = this.normalizeChannelId(req.query?.logChannel);
+    const fromHeader = this.normalizeChannelId(req.headers?.['x-log-channel']);
+    return fromQuery || fromHeader || '';
+  }
+
+  /**
+   * SSE接続用のチャンネルIDを正規化する。
+   * @param {unknown} value
+   * @returns {string}
+   */
+  normalizeChannelId(value) {
+    if (Array.isArray(value)) {
+      const candidate = value.find((item) => typeof item === 'string' && item.trim().length > 0);
+      return this.normalizeChannelId(candidate ?? '');
+    }
+    if (typeof value !== 'string') {
+      return '';
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return '';
+    }
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(trimmed)) {
+      return '';
+    }
+    return trimmed;
+  }
+
+  /**
+   * ログチャンネルが接続されるまで待機する。
+   * @param {string} channelId
+   * @param {number} [timeoutMs]
+   * @returns {Promise<void>}
+   */
+  async waitForLogChannel(channelId, timeoutMs = 1000) {
+    if (!channelId) {
+      return;
+    }
+    const start = Date.now();
+    // eslint-disable-next-line no-constant-condition
+    while (Date.now() - start < timeoutMs) {
+      const entry = this.logStreams.get(channelId);
+      if (entry && !entry.closed) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+  }
+
+  /**
+   * SSEでログを購読するクライアントを登録する。
+   * @param {ExpressRequest} req
+   * @param {ExpressResponse} res
+   */
+  handleTaskLogStream(req, res) {
+    const channelId =
+      this.normalizeChannelId(req.query?.channel) || this.normalizeChannelId(req.query?.logChannel);
+    if (!channelId) {
+      res.status(400).json({ error: 'channel クエリパラメータが必要です。' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const existing = this.logStreams.get(channelId);
+    if (existing) {
+      existing.closed = true;
+      clearInterval(existing.heartbeat);
+      this.logStreams.delete(channelId);
+      existing.res.end();
+    }
+
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': keep-alive\n\n');
+      }
+    }, 15000);
+
+    const entry = { res, heartbeat, closed: false };
+    this.logStreams.set(channelId, entry);
+
+    res.write('event: ready\n');
+    res.write('data: {}\n\n');
+
+    req.on('close', () => {
+      if (!entry.closed) {
+        entry.closed = true;
+        clearInterval(entry.heartbeat);
+        this.logStreams.delete(channelId);
+      }
+    });
+  }
+
+  /**
+   * ログ用の情報メッセージを送信する。
+   * @param {string} channelId
+   * @param {string} message
+   */
+  sendLogMessage(channelId, message) {
+    if (!channelId || !message) {
+      return;
+    }
+    this.sendLogEvent(channelId, 'info', { message });
+  }
+
+  /**
+   * ログ用のエラーメッセージを送信する。
+   * @param {string} channelId
+   * @param {string} message
+   */
+  sendLogError(channelId, message) {
+    if (!channelId || !message) {
+      return;
+    }
+    this.sendLogEvent(channelId, 'error', { message });
+  }
+
+  /**
+   * SSEイベントを送信する。
+   * @param {string} channelId
+   * @param {string} eventName
+   * @param {Record<string, any>} payload
+   */
+  sendLogEvent(channelId, eventName, payload = {}) {
+    if (!channelId) {
+      return;
+    }
+    const entry = this.logStreams.get(channelId);
+    if (!entry || entry.closed) {
+      return;
+    }
+    try {
+      const serialized = JSON.stringify(payload ?? {});
+      entry.res.write(`event: ${eventName}\n`);
+      entry.res.write(`data: ${serialized}\n\n`);
+    } catch (error) {
+      entry.closed = true;
+      clearInterval(entry.heartbeat);
+      this.logStreams.delete(channelId);
+      entry.res.end();
+      // eslint-disable-next-line no-console
+      console.error('Failed to send log event', error);
+    }
+  }
+
+  /**
+   * ログチャンネルを終了させる。
+   * @param {string} channelId
+   * @param {Record<string, any>} [payload]
+   */
+  closeLogStream(channelId, payload = {}) {
+    if (!channelId) {
+      return;
+    }
+    const entry = this.logStreams.get(channelId);
+    if (!entry || entry.closed) {
+      return;
+    }
+    this.sendLogEvent(channelId, 'end', payload ?? {});
+    entry.closed = true;
+    clearInterval(entry.heartbeat);
+    this.logStreams.delete(channelId);
+    entry.res.end();
+  }
+
+  /**
+   * コマンド実行時のログハンドラを生成する。
+   * @param {string} channelId
+   */
+  createCommandLogHandlers(channelId) {
+    return {
+      onCommandStart: ({ index, step }) => {
+        const commandLine = this.formatCommandLine(step);
+        this.sendLogEvent(channelId, 'command_start', {
+          index,
+          command: step?.command ?? '',
+          arguments: Array.isArray(step?.arguments) ? step.arguments : [],
+          commandLine
+        });
+      },
+      onCommandOutput: ({ index, stream, text }) => {
+        if (!text) {
+          return;
+        }
+        this.sendLogEvent(channelId, 'log', {
+          index,
+          stream,
+          text
+        });
+      },
+      onCommandEnd: ({ index, exitCode, timedOut }) => {
+        this.sendLogEvent(channelId, 'command_end', {
+          index,
+          exitCode,
+          timedOut
+        });
+      },
+      onCommandSkip: ({ index, step, reason }) => {
+        const commandLine = this.formatCommandLine(step);
+        this.sendLogEvent(channelId, 'command_skip', {
+          index,
+          reason,
+          command: step?.command ?? '',
+          commandLine
+        });
+      }
+    };
+  }
+
+  /**
+   * コマンドラインの文字列表現を作成する。
+   * @param {{command?: string, arguments?: string[]}} step
+   * @returns {string}
+   */
+  formatCommandLine(step) {
+    if (!step) {
+      return '';
+    }
+    const args = Array.isArray(step.arguments) ? step.arguments : [];
+    const parts = [step.command, ...args]
+      .map((part) => (part === undefined || part === null ? '' : String(part)))
+      .filter((part) => part.length > 0);
+    return parts.join(' ').trim();
   }
 
   /**

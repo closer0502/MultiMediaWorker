@@ -276,15 +276,14 @@ body.modal-open {
 
 .progress-modal-dialog {
   position: relative;
-  width: min(100%, 420px);
+  width: min(100%, 960px);
   pointer-events: auto;
   z-index: 1;
 }
 
 .progress-modal-dialog .progress-panel {
-  width: 100%;
-  max-width: none;
-  flex: 1 1 auto;
+  flex: 0 0 340px;
+  max-width: 360px;
 }
 
 .progress-panel {
@@ -293,6 +292,46 @@ body.modal-open {
   flex: 0 0 340px;
   min-width: 300px;
   max-width: 360px;
+}
+
+.progress-modal-layout {
+  display: flex;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.progress-log-panel {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.progress-log-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.progress-log-viewer {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  background: rgba(13, 17, 23, 0.7);
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.progress-log-viewer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.progress-log-viewer::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
 }
 
 .progress-lead {
@@ -343,11 +382,23 @@ body.modal-open {
     flex-direction: column;
   }
 
-  .progress-panel {
+  .progress-modal-layout {
+    flex-direction: column;
+  }
+
+  .progress-modal-dialog .progress-panel {
     flex: 1 1 auto;
     min-width: 0;
     width: 100%;
     max-width: none;
+  }
+
+  .progress-log-panel {
+    width: 100%;
+  }
+
+  .progress-log-viewer {
+    max-height: 240px;
   }
 }
 

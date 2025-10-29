@@ -37,7 +37,8 @@ export default function App() {
     canSubmitRevision,
     isSubmittingComplaint,
     handleComplaintSubmit,
-    handleComplaintChange
+    handleComplaintChange,
+    liveLogs
   } = useTaskWorkflow();
 
   return (
@@ -97,7 +98,7 @@ export default function App() {
         )}
       </main>
 
-      {isSubmitting && <ProgressModal stage={progressStage} percent={progressPercent} />}
+      {isSubmitting && <ProgressModal stage={progressStage} percent={progressPercent} logs={liveLogs} />}
     </div>
   );
 }
