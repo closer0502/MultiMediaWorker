@@ -270,6 +270,10 @@ export class MediaAgentServer {
       const errorContext = isAgentError ? error.context || {} : {};
       const planPayload = isAgentError ? errorContext.plan ?? null : null;
       const rawPlan = isAgentError ? errorContext.rawPlan ?? planPayload : null;
+      const resultPayload = isAgentError ? errorContext.result ?? null : null;
+      const detailMessage = error?.message || 'Task execution failed.';
+      const errorMessage = 'Task execution failed.';
+      const statusCode = isAgentError ? 422 : 500;
       const record = this.buildSessionRecord({
         sessionId: session.id,
         submittedAt,
@@ -277,13 +281,13 @@ export class MediaAgentServer {
         status: 'failed',
         plan: planPayload,
         rawPlan,
-        result: null,
+        result: resultPayload,
         phases,
         uploadedFiles: files,
         requestOptions,
         debug: debugMode.enabled ? errorContext.debug ?? null : null,
-        error: 'コマンド生成に失敗しました。',
-        detail: error.message,
+        error: errorMessage,
+        detail: detailMessage,
         responseText: isAgentError ? errorContext.responseText ?? null : null,
         parentSessionId: null,
         complaintContext: null
@@ -291,19 +295,19 @@ export class MediaAgentServer {
       await this.writeSessionRecord(record);
 
       if (logChannel) {
-        const message = error?.message || 'タスクの処理中にエラーが発生しました。';
-        this.sendLogError(logChannel, message);
+        this.sendLogError(logChannel, detailMessage);
         this.closeLogStream(logChannel, { status: 'error' });
       }
 
-      res.status(500).json({
+      res.status(statusCode).json({
         status: 'failed',
         sessionId: session.id,
-        error: 'コマンド生成に失敗しました。',
-        detail: error.message,
+        error: errorMessage,
+        detail: detailMessage,
         phases,
         plan: planPayload,
         rawPlan,
+        result: resultPayload,
         responseText: isAgentError ? errorContext.responseText ?? null : null,
         debug: debugMode.enabled ? errorContext.debug ?? null : undefined,
         uploadedFiles: files,
@@ -460,6 +464,10 @@ export class MediaAgentServer {
       const errorContext = isAgentError ? error.context || {} : {};
       const planPayload = isAgentError ? errorContext.plan ?? null : null;
       const rawPlan = isAgentError ? errorContext.rawPlan ?? planPayload : null;
+      const resultPayload = isAgentError ? errorContext.result ?? null : null;
+      const detailMessage = error?.message || 'Task execution failed.';
+      const errorMessage = 'Task execution failed.';
+      const statusCode = isAgentError ? 422 : 500;
       const record = this.buildSessionRecord({
         sessionId: session.id,
         submittedAt,
@@ -467,13 +475,13 @@ export class MediaAgentServer {
         status: 'failed',
         plan: planPayload,
         rawPlan,
-        result: null,
+        result: resultPayload,
         phases,
         uploadedFiles: revisionFiles,
         requestOptions,
         debug: debugMode.enabled ? errorContext.debug ?? null : null,
-        error: 'コマンド生成に失敗しました。',
-        detail: error.message,
+        error: errorMessage,
+        detail: detailMessage,
         responseText: isAgentError ? errorContext.responseText ?? null : null,
         parentSessionId: baseSessionId,
         complaintContext: { sessionId: baseSessionId, message: complaint }
@@ -484,23 +492,23 @@ export class MediaAgentServer {
         message: complaint,
         followUpSessionId: session.id,
         status: 'failed',
-        error: error.message
+        error: detailMessage
       });
 
       if (logChannel) {
-        const message = error?.message || '再編集処理中にエラーが発生しました。';
-        this.sendLogError(logChannel, message);
+        this.sendLogError(logChannel, detailMessage);
         this.closeLogStream(logChannel, { status: 'error' });
       }
 
-      res.status(500).json({
+      res.status(statusCode).json({
         status: 'failed',
         sessionId: session.id,
-        error: 'コマンド生成に失敗しました。',
-        detail: error.message,
+        error: errorMessage,
+        detail: detailMessage,
         phases,
         plan: planPayload,
         rawPlan,
+        result: resultPayload,
         responseText: isAgentError ? errorContext.responseText ?? null : null,
         debug: debugMode.enabled ? errorContext.debug ?? null : undefined,
         uploadedFiles: revisionFiles,

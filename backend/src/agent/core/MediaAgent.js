@@ -65,7 +65,7 @@ export class MediaAgent {
         tracker.log('execute', 'Dry-run mode enabled; skipping command execution.');
       }
       result = await this.executor.execute(plan, { ...executionOptions, dryRun });
-      tracker.complete('execute', {
+      const executeMeta = {
         exitCode: result.exitCode,
         timedOut: result.timedOut,
         dryRun: dryRun || result?.dryRun || false,
@@ -74,9 +74,24 @@ export class MediaAgent {
           status: step.status,
           exitCode: step.exitCode,
           timedOut: step.timedOut,
-          skipReason: step.skipReason
+          skipReason: step.skipReason ?? null
         }))
-      });
+      };
+      if (hasExecutionFailure(result)) {
+        const failureError = new Error(describeExecutionFailure(result));
+        failureError.name = 'CommandExecutionError';
+        tracker.fail('execute', failureError, executeMeta);
+        throw new MediaAgentTaskError('Execution phase failed', tracker.getPhases(), {
+          cause: failureError,
+          context: {
+            plan,
+            rawPlan: rawPlan ?? plan,
+            debug: debugInfo,
+            result
+          }
+        });
+      }
+      tracker.complete('execute', executeMeta);
     } catch (error) {
       tracker.fail('execute', error);
       throw new MediaAgentTaskError('Execution phase failed', tracker.getPhases(), {
@@ -106,6 +121,68 @@ export class MediaAgent {
   getToolRegistry() {
     return this.toolRegistry;
   }
+}
+
+/**
+ * Determine whether the executor result contains a failed command.
+ * @param {CommandExecutionResult} result
+ * @returns {boolean}
+ */
+function hasExecutionFailure(result) {
+  if (!result) {
+    return false;
+  }
+  if (result.timedOut) {
+    return true;
+  }
+  if (typeof result.exitCode === 'number' && result.exitCode !== 0) {
+    return true;
+  }
+  if (!Array.isArray(result.steps)) {
+    return false;
+  }
+  return result.steps.some((step) => {
+    if (!step || step.status !== 'executed') {
+      return false;
+    }
+    if (step.timedOut) {
+      return true;
+    }
+    return typeof step.exitCode === 'number' && step.exitCode !== 0;
+  });
+}
+
+/**
+ * Generate a human-readable summary for the first failing command.
+ * @param {CommandExecutionResult} result
+ * @returns {string}
+ */
+function describeExecutionFailure(result) {
+  if (!result) {
+    return 'Command execution failed.';
+  }
+  if (result.timedOut) {
+    return 'Command execution timed out.';
+  }
+  const failedStep =
+    Array.isArray(result.steps) &&
+    result.steps.find(
+      (step) =>
+        step &&
+        step.status === 'executed' &&
+        (step.timedOut || (typeof step.exitCode === 'number' && step.exitCode !== 0))
+    );
+  if (failedStep) {
+    if (failedStep.timedOut) {
+      return `Command "${failedStep.command}" timed out.`;
+    }
+    const exitCode = typeof failedStep.exitCode === 'number' ? failedStep.exitCode : 'unknown';
+    return `Command "${failedStep.command}" exited with code ${exitCode}.`;
+  }
+  if (typeof result.exitCode === 'number' && result.exitCode !== 0) {
+    return `Command execution exited with code ${result.exitCode}.`;
+  }
+  return 'Command execution failed.';
 }
 
 /**

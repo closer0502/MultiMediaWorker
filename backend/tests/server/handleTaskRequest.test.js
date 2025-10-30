@@ -135,8 +135,9 @@ async function testMediaAgentServerHandleTaskRequestAgentError() {
   const res = createMockResponse();
   await server.handleTaskRequest(req, res);
 
-  assert.equal(res.statusCode, 500);
+  assert.equal(res.statusCode, 422);
   assert.equal(res.body.status, 'failed');
+  assert.equal(res.body.error, 'Task execution failed.');
   assert.equal(res.body.plan, errorContext.plan);
   assert.equal(res.body.rawPlan, errorContext.rawPlan);
   assert.equal(res.body.responseText, errorContext.responseText);
