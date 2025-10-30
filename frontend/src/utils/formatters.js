@@ -1,4 +1,7 @@
 import { STATUS_LABELS } from '../constants/app.js';
+import { MESSAGES } from '../i18n/messages.js';
+
+const FORMATTER_MESSAGES = MESSAGES.formatters;
 
 export function formatFileSize(bytes) {
   if (!bytes && bytes !== 0) {
@@ -26,39 +29,28 @@ export function quoteArgument(argument) {
 
 export function statusLabel(status) {
   if (!status) {
-    return '保留';
+    return FORMATTER_MESSAGES.unknownStatus;
   }
   if (STATUS_LABELS[status]) {
     return STATUS_LABELS[status];
   }
   if (status === 'in_progress') {
-    return '進行中';
+    return FORMATTER_MESSAGES.inProgress;
   }
   if (status === 'pending') {
-    return '保留';
+    return FORMATTER_MESSAGES.pending;
   }
   return status;
 }
 
 export function formatPhaseMetaKey(key) {
-  const mapping = {
-    taskPreview: 'タスク概要',
-    fileCount: 'ファイル数',
-    dryRun: 'ドライラン',
-    debug: 'デバッグ',
-    command: 'コマンド',
-    commands: 'コマンド',
-    timedOut: 'タイムアウト',
-    exitCode: '終了コード',
-    steps: 'ステップ数',
-    outputs: '出力数'
-  };
+  const mapping = FORMATTER_MESSAGES.phaseMetaKeys || {};
   return mapping[key] || key;
 }
 
 export function formatPhaseMetaValue(value) {
   if (typeof value === 'boolean') {
-    return value ? 'はい' : 'いいえ';
+    return value ? FORMATTER_MESSAGES.booleanTrue : FORMATTER_MESSAGES.booleanFalse;
   }
   return String(value);
 }
@@ -82,7 +74,10 @@ export function deriveDownloadName(item) {
   if (!source) {
     return undefined;
   }
-  const parts = String(source).replace(/\\/g, '/').split('/').filter(Boolean);
+  const parts = String(source)
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean);
   return parts.length ? parts[parts.length - 1] : undefined;
 }
 

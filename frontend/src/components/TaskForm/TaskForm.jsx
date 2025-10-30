@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import FilePreviewList from './FilePreviewList.jsx';
+import { MESSAGES } from '../../i18n/messages.js';
 
 export default function TaskForm({
   task,
@@ -40,15 +41,17 @@ export default function TaskForm({
     [onFilesSelected]
   );
 
+  const messages = MESSAGES.taskForm;
+
   return (
     <section className="panel task-panel">
-      <h2>タスクを送信</h2>
+      <h2>{messages.heading}</h2>
       <form className="task-form" onSubmit={onSubmit}>
         <label className="field">
-          <span>目的 / 指示</span>
+          <span>{messages.taskLabel}</span>
           <textarea
             value={task}
-            placeholder='例: 「135329973_p1.png を 512x512 の PNG にリサイズ」'
+            placeholder={messages.placeholder}
             onChange={handleTaskChange}
             rows={5}
             disabled={isSubmitting}
@@ -56,7 +59,7 @@ export default function TaskForm({
         </label>
 
         <div className="field">
-          <label htmlFor="task-form-file-input">ファイルを添付</label>
+          <label htmlFor="task-form-file-input">{messages.attachLabel}</label>
           <input
             ref={fileInputRef}
             id="task-form-file-input"
@@ -65,7 +68,7 @@ export default function TaskForm({
             multiple
             onChange={handleFileChange}
             disabled={isSubmitting}
-            aria-label="ファイルを添付"
+            aria-label={messages.attachAria}
           />
           <FilePreviewList
             files={selectedFiles}
@@ -83,7 +86,7 @@ export default function TaskForm({
               onChange={(event) => onToggleDebugOptions(event.target.checked)}
               disabled={isSubmitting}
             />
-            <span className="debug-options-title">デバッグオプション</span>
+            <span className="debug-options-title">{messages.debugOptionsTitle}</span>
           </label>
           {showDebugOptions && (
             <div className="debug-options-body">
@@ -94,7 +97,7 @@ export default function TaskForm({
                   onChange={(event) => onDryRunChange(event.target.checked)}
                   disabled={isSubmitting}
                 />
-                <span>ドライラン（コマンド実行をスキップ）</span>
+                <span>{messages.dryRunLabel}</span>
               </label>
               <label className="option">
                 <input
@@ -103,7 +106,7 @@ export default function TaskForm({
                   onChange={(event) => onDebugChange(event.target.checked)}
                   disabled={isSubmitting}
                 />
-                <span>プラン生成のデバッグ情報を含める（生レスポンス含む）</span>
+                <span>{messages.debugVerboseLabel}</span>
               </label>
             </div>
           )}
@@ -111,10 +114,10 @@ export default function TaskForm({
 
         <div className="form-actions">
           <button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '処理中…' : '送信する'}
+            {isSubmitting ? messages.submitting : messages.submit}
           </button>
           <button type="button" onClick={onReset} disabled={isSubmitting}>
-            リセット
+            {messages.reset}
           </button>
         </div>
       </form>

@@ -2,8 +2,9 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../src/App.jsx';
+import { MESSAGES } from '../../src/i18n/messages.js';
 
-describe('エラーバナーリトライフロー', () => {
+describe('エラーバナーのリトライフロー', () => {
   afterEach(() => {
     if (typeof vi.unstubAllGlobals === 'function') {
       vi.unstubAllGlobals();
@@ -56,7 +57,7 @@ describe('エラーバナーリトライフロー', () => {
     const successPayload = {
       status: 'success',
       sessionId: 'session-success',
-      task: '画像をオーバーレイして',
+      task: '画像をオーバーレイ合成',
       plan: { steps: [{ command: 'magick', arguments: ['-help'] }] },
       rawPlan: { steps: [{ command: 'magick', arguments: ['-help'] }] },
       result: {
@@ -113,28 +114,26 @@ describe('エラーバナーリトライフロー', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const taskField = screen.getByLabelText('目的 / 指示');
-    await user.type(taskField, '画像をオーバーレイして');
-    await user.click(screen.getByRole('button', { name: '送信する' }));
+    const taskField = screen.getByLabelText(MESSAGES.taskForm.taskLabel);
+    await user.type(taskField, '画像をオーバーレイ合成');
+    await user.click(screen.getByRole('button', { name: MESSAGES.taskForm.submit }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock.mock.calls[0][0]).toBe('/api/tasks');
     expect(fetchMock.mock.calls[0][1].body).toBeInstanceOf(FormData);
 
-    const bannerTitle = await screen.findByText('プラン実行でエラーが発生しました。');
+    const bannerTitle = await screen.findByText(MESSAGES.latestOutputs.errorTitle);
     const banner = bannerTitle.closest('.error-banner');
     expect(banner).not.toBeNull();
-    expect(
-      within(banner).getByText('Command "magick" exited with code 1.')
-    ).toBeInTheDocument();
+    expect(within(banner).getByText(failurePayload.detail)).toBeInTheDocument();
 
-    const retryButton = screen.getByRole('button', { name: 'エラーから再編集' });
+    const retryButton = screen.getByRole('button', { name: MESSAGES.latestOutputs.errorAction });
     await user.click(retryButton);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock.mock.calls[1][0]).toBe('/api/tasks');
 
     await waitFor(() => expect(document.querySelector('.error-banner')).toBeNull());
-    expect(await screen.findByRole('heading', { name: '最新の結果' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: MESSAGES.app.sections.latestResult })).toBeInTheDocument();
   });
 });

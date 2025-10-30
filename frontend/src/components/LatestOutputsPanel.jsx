@@ -1,4 +1,5 @@
 import OutputList from './common/OutputList.jsx';
+import { MESSAGES } from '../i18n/messages.js';
 
 export default function LatestOutputsPanel({
   isSubmitting,
@@ -15,13 +16,15 @@ export default function LatestOutputsPanel({
   isSubmittingComplaint,
   canSubmitRevision
 }) {
+  const messages = MESSAGES.latestOutputs;
+
   return (
     <section className="panel">
-      <h2>生成物</h2>
+      <h2>{messages.heading}</h2>
       {showErrorBanner && (
         <div className="error-banner">
           <div className="error-banner__content">
-            <p className="error-banner__title">プラン実行でエラーが発生しました。</p>
+            <p className="error-banner__title">{messages.errorTitle}</p>
             {errorMessage && <p className="error-banner__message">{errorMessage}</p>}
             <button
               type="button"
@@ -29,33 +32,33 @@ export default function LatestOutputsPanel({
               disabled={isSubmitting}
               className="error-banner__action"
             >
-              エラーから再編集
+              {messages.errorAction}
             </button>
           </div>
         </div>
       )}
       {isSubmitting ? (
-        <p className="note">最新の生成結果が整い次第ここに表示されます。</p>
+        <p className="note">{messages.processing}</p>
       ) : outputs.length > 0 ? (
         <OutputList outputs={outputs} />
       ) : (
-        <p className="note">まだ表示できる生成物がありません。</p>
+        <p className="note">{messages.empty}</p>
       )}
       <div className="complaint-section">
-        <h3>修正リクエスト</h3>
+        <h3>{messages.complaintSectionTitle}</h3>
         <p className="complaint-hint">{helperMessage}</p>
         <textarea
           value={complaintText}
           onChange={(event) => onComplaintChange(event.target.value)}
-          placeholder="例: 出力された動画が指定より暗いので明るさを調整してください。"
+          placeholder={messages.complaintPlaceholder}
           rows={4}
           disabled={isSubmittingComplaint || isSubmitting || !canSubmitRevision}
         />
         <div className="complaint-actions">
           <button type="button" onClick={onComplaintSubmit} disabled={complaintButtonDisabled}>
-            {isSubmittingComplaint ? '送信中...' : '再編集を依頼'}
+            {isSubmittingComplaint ? messages.complaintSubmitting : messages.complaintButton}
           </button>
-          <span className="complaint-hint">最新の生成物をもとに再編集を依頼します。</span>
+          <span className="complaint-hint">{messages.complaintHint}</span>
         </div>
         {complaintError && <div className="error">{complaintError}</div>}
       </div>

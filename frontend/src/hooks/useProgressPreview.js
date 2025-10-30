@@ -1,12 +1,9 @@
 import { useEffect, useMemo } from 'react';
 import { PROGRESS_STEPS } from '../constants/app.js';
+import { MESSAGES } from '../i18n/messages.js';
 
 const DEFAULT_STAGE = 1;
-const DEFAULT_LOGS = [
-  'タスクを受け付けました。コマンドプランを生成しています…',
-  'FFmpeg の下準備を行っています…',
-  'ログを収集中です。最終チェックまでしばらくお待ちください。'
-];
+const DEFAULT_LOGS = MESSAGES.progressPreview.defaultLogs;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 

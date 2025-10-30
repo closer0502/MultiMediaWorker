@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../src/App.jsx';
+import { MESSAGES } from '../../src/i18n/messages.js';
 
 describe('タスク送信フォーム', () => {
   afterEach(() => {
@@ -14,19 +15,21 @@ describe('タスク送信フォーム', () => {
   it('初期表示でフォームとガイダンスが確認できる', () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'MultiMedia Worker' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'タスクを送信' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '送信する' })).toBeInTheDocument();
-    expect(screen.getByText('まだ表示できる生成物がありません。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: MESSAGES.app.header.title })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: MESSAGES.app.sections.taskForm })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: MESSAGES.taskForm.submit })).toBeInTheDocument();
+    expect(screen.getByText(MESSAGES.latestOutputs.empty)).toBeInTheDocument();
   });
 
   it('入力が空のまま送信するとバリデーションエラーを表示する', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: '送信する' }));
+    await user.click(screen.getByRole('button', { name: MESSAGES.taskForm.submit }));
 
-    const validationMessages = await screen.findAllByText((content) => content.includes('タスク内容を入力してください。'));
+    const validationMessages = await screen.findAllByText((content) =>
+      content.includes(MESSAGES.workflow.validation.emptyTask)
+    );
     expect(validationMessages.length).toBeGreaterThan(0);
   });
 
@@ -34,7 +37,7 @@ describe('タスク送信フォーム', () => {
     const payload = {
       sessionId: 'session-1',
       submittedAt: '2024-01-10T00:00:00.000Z',
-      task: '映像をリサイズ',
+      task: '画像をリサイズ',
       plan: {
         overview: 'Simple plan',
         followUp: '',
@@ -66,7 +69,10 @@ describe('タスク送信フォーム', () => {
           }
         ]
       },
-      phases: [{ id: 'plan', status: 'success' }, { id: 'execute', status: 'success' }],
+      phases: [
+        { id: 'plan', status: 'success' },
+        { id: 'execute', status: 'success' }
+      ],
       uploadedFiles: [
         { id: 'file-1', originalName: 'sample.png', size: 1024, mimeType: 'image/png' }
       ],
@@ -77,34 +83,35 @@ describe('タスク送信フォーム', () => {
     };
 
     let resolveFetch;
-    const mockFetch = vi.fn(() => {
-      return new Promise((resolve) => {
-        resolveFetch = () =>
-          resolve({
-            ok: true,
-            json: () => Promise.resolve(payload)
-          });
-      });
-    });
+    const mockFetch = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = () =>
+            resolve({
+              ok: true,
+              json: () => Promise.resolve(payload)
+            });
+        })
+    );
     vi.stubGlobal('fetch', mockFetch);
 
     const user = userEvent.setup();
     render(<App />);
 
-    const taskField = screen.getByLabelText('目的 / 指示');
-    await user.type(taskField, '映像をリサイズ');
+    const taskField = screen.getByLabelText(MESSAGES.taskForm.taskLabel);
+    await user.type(taskField, '画像をリサイズ');
 
-    const fileInput = screen.getByLabelText('ファイルを添付');
+    const fileInput = screen.getByLabelText(MESSAGES.taskForm.attachLabel);
     const file = new File(['content'], 'sample.png', { type: 'image/png' });
     await user.upload(fileInput, file);
 
-    expect(screen.getByText('選択したファイル（1）')).toBeInTheDocument();
+    expect(screen.getByText(MESSAGES.filePreview.selectedLabel(1))).toBeInTheDocument();
     expect(screen.getByText('sample.png')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '送信する' }));
+    await user.click(screen.getByRole('button', { name: MESSAGES.taskForm.submit }));
 
-    expect(await screen.findByRole('button', { name: '処理中…' })).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: 'ただいま処理しています' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: MESSAGES.taskForm.submitting })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: MESSAGES.progress.dialogTitle })).toBeInTheDocument();
 
     resolveFetch();
 
@@ -119,11 +126,11 @@ describe('タスク送信フォーム', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
-    expect(screen.getByRole('button', { name: '送信する' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: MESSAGES.taskForm.submit })).toBeEnabled();
 
-    expect(await screen.findByRole('heading', { name: '最新の結果' })).toBeInTheDocument();
-    expect(screen.getAllByText('成功')).not.toHaveLength(0);
-    expect(screen.getByText('映像をリサイズ')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: MESSAGES.app.sections.latestResult })).toBeInTheDocument();
+    expect(screen.getAllByText(MESSAGES.progress.statusLabels.success)).not.toHaveLength(0);
+    expect(screen.getByText('画像をリサイズ')).toBeInTheDocument();
     expect(screen.getByText(/1）ffmpeg/)).toBeInTheDocument();
   });
 });

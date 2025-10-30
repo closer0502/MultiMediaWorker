@@ -1,3 +1,5 @@
+import { MESSAGES } from '../../i18n/messages.js';
+
 export default function DebugDetails({ debug }) {
   if (!debug) {
     return null;
@@ -5,7 +7,7 @@ export default function DebugDetails({ debug }) {
   const printable = Object.entries(debug).filter(([, value]) => value !== undefined && value !== null);
 
   if (!printable.length) {
-    return <p>デバッグ情報は返されませんでした。</p>;
+    return <p>{MESSAGES.debug.empty}</p>;
   }
 
   return (

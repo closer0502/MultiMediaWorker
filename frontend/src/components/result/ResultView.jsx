@@ -6,40 +6,44 @@ import PhaseChecklist from '../common/PhaseChecklist.jsx';
 import PlanStepList from '../common/PlanStepList.jsx';
 import ProcessSummary from '../common/ProcessSummary.jsx';
 import UploadedFileList from '../common/UploadedFileList.jsx';
+import { MESSAGES } from '../../i18n/messages.js';
 
 export default function ResultView({ entry }) {
   const outputList = entry?.result?.resolvedOutputs || [];
-  const statusLabel = STATUS_LABELS[entry.status] || entry.status || '不明';
+  const status = entry.status || 'unknown';
+  const statusLabel = STATUS_LABELS[status] || status || MESSAGES.formatters.unknownStatus;
+  const statusClassName = `status-chip status-${status}`;
   const plan = normalizePlan(entry.plan ?? entry.rawPlan);
   const followUp = plan?.followUp || '';
   const overview = plan?.overview || '';
   const planSteps = plan?.steps || [];
   const stepResults = Array.isArray(entry?.result?.steps) ? entry.result.steps : [];
+  const messages = MESSAGES.result;
 
   return (
     <div className="result-view">
       <div className="result-header">
-        <span className={`status-chip status-${entry.status}`}>{statusLabel}</span>
-        {entry.parentSessionId && <span className="chip">再編集</span>}
-        {entry.requestOptions?.dryRun && <span className="chip">ドライラン</span>}
-        {entry.requestOptions?.debug && <span className="chip">デバッグ</span>}
+        <span className={statusClassName}>{statusLabel}</span>
+        {entry.parentSessionId && <span className="chip">{messages.revisionChip}</span>}
+        {entry.requestOptions?.dryRun && <span className="chip">{messages.dryRunChip}</span>}
+        {entry.requestOptions?.debug && <span className="chip">{messages.debugChip}</span>}
       </div>
 
       {entry.error && <div className="error inline">{entry.error}</div>}
       {entry.complaint && (
         <div className="result-section">
-          <h3>ユーザーからのクレーム内容</h3>
+          <h3>{messages.complaintHeading}</h3>
           <p>{entry.complaint}</p>
         </div>
       )}
 
       <div className="result-section">
-        <h3>ワークフロー</h3>
+        <h3>{messages.phasesHeading}</h3>
         <PhaseChecklist phases={entry.phases} />
       </div>
 
       <div className="result-section">
-        <h3>コマンドプラン</h3>
+        <h3>{messages.planHeading}</h3>
         {plan ? (
           <>
             <code className="command-line">{buildPlanSummary(plan)}</code>
@@ -47,22 +51,22 @@ export default function ResultView({ entry }) {
             <PlanStepList steps={planSteps} results={stepResults} />
           </>
         ) : (
-          <p>コマンドプランが利用できません。</p>
+          <p>{messages.planUnavailable}</p>
         )}
       </div>
 
       {followUp && (
         <div className="result-section">
-          <h3>追加メモ</h3>
+          <h3>{messages.followUpHeading}</h3>
           <p>{followUp}</p>
         </div>
       )}
 
       {entry.rawPlan && (
         <div className="result-section">
-          <h3>プランナー出力（生データ）</h3>
+          <h3>{messages.rawPlanHeading}</h3>
           <details className="debug-block">
-            <summary>JSON を表示</summary>
+            <summary>{messages.rawPlanSummary}</summary>
             <pre>{JSON.stringify(entry.rawPlan, null, 2)}</pre>
           </details>
         </div>
@@ -70,32 +74,32 @@ export default function ResultView({ entry }) {
 
       {entry.responseText && (
         <div className="result-section">
-          <h3>生レスポンス</h3>
+          <h3>{messages.responseHeading}</h3>
           <details className="debug-block">
-            <summary>レスポンスを表示</summary>
+            <summary>{messages.responseSummary}</summary>
             <pre>{entry.responseText}</pre>
           </details>
         </div>
       )}
 
       <div className="result-section">
-        <h3>アップロードしたファイル</h3>
+        <h3>{messages.uploadsHeading}</h3>
         <UploadedFileList files={entry.uploadedFiles} />
       </div>
 
       <div className="result-section">
-        <h3>出力ファイル</h3>
+        <h3>{messages.outputsHeading}</h3>
         <OutputList outputs={outputList} showPreview={false} />
       </div>
 
       <div className="result-section">
-        <h3>実行詳細</h3>
+        <h3>{messages.summaryHeading}</h3>
         <ProcessSummary result={entry.result} />
       </div>
 
       {entry.debug && (
         <div className="result-section">
-          <h3>デバッグ情報</h3>
+          <h3>{messages.debugHeading}</h3>
           <DebugDetails debug={entry.debug} />
         </div>
       )}

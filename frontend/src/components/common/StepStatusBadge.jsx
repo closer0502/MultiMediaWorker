@@ -1,19 +1,23 @@
+import { MESSAGES } from '../../i18n/messages.js';
+
 export default function StepStatusBadge({ result }) {
   if (!result) {
     return null;
   }
 
-  const statusLabel = result.status === 'executed' ? '実行済み' : 'スキップ';
+  const messages = MESSAGES.stepStatusBadge;
+  const status = result.status || 'unknown';
+  const statusLabel = status === 'executed' ? messages.executed : messages.skipped;
   const extras = [];
-  if (result.status === 'executed') {
+  if (status === 'executed') {
     if (result.exitCode !== null && result.exitCode !== undefined) {
-      extras.push(`終了コード ${result.exitCode}`);
+      extras.push(`${messages.exitCode} ${result.exitCode}`);
     }
     if (result.timedOut) {
-      extras.push('タイムアウト');
+      extras.push(messages.timedOut);
     }
   }
 
-  const text = extras.length ? `${statusLabel} (${extras.join(', ')})` : statusLabel;
-  return <span className={`chip step-status-${result.status}`}>{text}</span>;
+  const text = extras.length ? `${statusLabel} (${extras.join(' / ')})` : statusLabel;
+  return <span className={`chip step-status-${status}`}>{text}</span>;
 }

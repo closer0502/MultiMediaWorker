@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { extractFileExtension, formatFileSize } from '../../utils/formatters.js';
+import { MESSAGES } from '../../i18n/messages.js';
 
 export default function FilePreviewList({ files, onClear, onAdd, disabled }) {
-  const totalSize = useMemo(
-    () => files.reduce((sum, file) => sum + file.size, 0),
-    [files]
-  );
+  const messages = MESSAGES.filePreview;
+  const totalSize = useMemo(() => files.reduce((sum, file) => sum + file.size, 0), [files]);
   const [previewItems, setPreviewItems] = useState([]);
   const hasFiles = files.length > 0;
 
@@ -73,11 +72,11 @@ export default function FilePreviewList({ files, onClear, onAdd, disabled }) {
     <div className={`file-preview ${hasFiles ? 'has-files' : 'is-empty'}`}>
       <div className="file-preview-header">
         <div className="file-preview-header-info">
-          <strong>選択したファイル（{files.length}）</strong>
+          <strong>{messages.selectedLabel(files.length)}</strong>
           {hasFiles && <span className="file-preview-total-size">{formatFileSize(totalSize)}</span>}
         </div>
         <button type="button" onClick={handleClearClick} disabled={disabled || !hasFiles}>
-          クリア
+          {messages.clear}
         </button>
       </div>
       {hasFiles ? (
@@ -86,7 +85,7 @@ export default function FilePreviewList({ files, onClear, onAdd, disabled }) {
             <li key={key}>
               <div className="file-preview-thumb">
                 {previewUrl ? (
-                  <img src={previewUrl} alt={`${file.name}のプレビュー`} />
+                  <img src={previewUrl} alt={messages.previewAlt(file.name)} />
                 ) : (
                   <span>{fallbackLabel}</span>
                 )}
@@ -101,7 +100,7 @@ export default function FilePreviewList({ files, onClear, onAdd, disabled }) {
           ))}
         </ul>
       ) : (
-        <p className="file-preview-empty">ファイルが選択されていません</p>
+        <p className="file-preview-empty">{messages.none}</p>
       )}
       <div className="file-preview-footer">
         <button
@@ -110,7 +109,7 @@ export default function FilePreviewList({ files, onClear, onAdd, disabled }) {
           onClick={handleAddClick}
           disabled={disabled}
         >
-          ファイルの追加
+          {messages.add}
         </button>
       </div>
     </div>

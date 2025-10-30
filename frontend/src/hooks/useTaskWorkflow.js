@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PROGRESS_ROTATION_MS, PROGRESS_STEPS } from '../constants/app.js';
+import { MESSAGES } from '../i18n/messages.js';
 
 const INITIAL_HISTORY = [];
 const LOG_LINE_LIMIT = 500;
@@ -40,6 +41,11 @@ export function useTaskWorkflow() {
   const eventSourceRef = useRef(null);
   const logChannelRef = useRef('');
   const logChunkBufferRef = useRef({ stdout: '', stderr: '' });
+  const workflowMessages = MESSAGES.workflow;
+  const logMessages = workflowMessages.logs;
+  const validationMessages = workflowMessages.validation;
+  const errorMessages = workflowMessages.errors;
+  const helperMessages = workflowMessages.helper;
 
   useEffect(() => {
     if (!isSubmitting) {
@@ -190,7 +196,7 @@ export function useTaskWorkflow() {
             ? payload.command
             : '';
       const label = index ? `[${index}] ` : '';
-      const prefix = commandLine ? `$ ${commandLine}` : 'コマンドを開始します。';
+      const prefix = commandLine ? `$ ${commandLine}` : logMessages.commandStart;
       appendLogLines([`${label}${prefix}`]);
     };
 
@@ -201,11 +207,11 @@ export function useTaskWorkflow() {
       const exitCode = typeof payload?.exitCode === 'number' ? payload.exitCode : payload?.exitCode;
       let suffix;
       if (timedOut) {
-        suffix = 'タイムアウトしました。';
+        suffix = logMessages.timeout;
       } else if (exitCode === null || exitCode === undefined) {
-        suffix = '終了コード: 不明';
+        suffix = logMessages.exitCodeUnknown;
       } else {
-        suffix = `終了コード: ${exitCode}`;
+        suffix = `${logMessages.exitCodePrefix}${exitCode}`;
       }
       const label = index ? `[${index}] ` : '';
       appendLogLines([`${label}${suffix}`]);
@@ -221,14 +227,23 @@ export function useTaskWorkflow() {
           : typeof payload?.command === 'string'
             ? payload.command
             : '';
-      const reasonText =
-        reason === 'dry_run'
-          ? 'ドライランのためスキップ'
-          : reason === 'previous_step_failed'
-            ? '前のステップが失敗したためスキップ'
-            : reason === 'no_op_command'
-              ? '実行対象のコマンドがありません'
-              : `スキップ (${reason})`;
+      let reasonText;
+      switch (reason) {
+        case 'dry_run':
+          reasonText = logMessages.skipDryRun;
+          break;
+        case 'previous_step_failed':
+          reasonText = logMessages.skipPreviousFailed;
+          break;
+        case 'no_op_command':
+          reasonText = logMessages.skipNoCommand;
+          break;
+        default:
+          reasonText = reason
+            ? `${logMessages.skipFallbackPrefix}${reason}${logMessages.skipFallbackSuffix}`
+            : logMessages.noAdditionalInfo;
+          break;
+      }
       const label = index ? `[${index}] ` : '';
       const suffix = commandLine ? `: ${commandLine}` : '';
       appendLogLines([`${label}${reasonText}${suffix}`]);
@@ -317,7 +332,7 @@ export function useTaskWorkflow() {
       };
 
       if (!trimmedTask) {
-        const validationMessage = 'タスク内容を入力してください。';
+        const validationMessage = validationMessages.emptyTask;
         setError(validationMessage);
         setPlanStatus('failed');
         setPlanError({
@@ -382,7 +397,7 @@ export function useTaskWorkflow() {
         const recordedAt = payload?.submittedAt || submittedAt;
 
         if (!response.ok) {
-          const message = payload?.error || '実行中に問題が発生しました。';
+          const message = payload?.error || errorMessages.submitGeneric;
           const detail = payload?.detail || message;
           setError(message);
           setPlanStatus('failed');
@@ -423,7 +438,7 @@ export function useTaskWorkflow() {
         }
 
         if (!payload) {
-          throw new Error('サーバーからの応答を解析できませんでした。');
+          throw new Error(errorMessages.parseResponse);
         }
 
         const finalStatus = payload.status || 'success';
@@ -462,7 +477,7 @@ export function useTaskWorkflow() {
           return true;
         }
 
-        const failureMessage = detailMessage || 'プランの実行に失敗しました。';
+        const failureMessage = detailMessage || errorMessages.executionFailed;
         setError(failureMessage);
         setPlanStatus('failed');
         setPlanError({
@@ -473,7 +488,7 @@ export function useTaskWorkflow() {
         });
         return false;
       } catch (submitError) {
-        const message = submitError?.message || '実行中にエラーが発生しました。';
+        const message = submitError?.message || errorMessages.executionError;
         setError(message);
         const recordedAt = new Date().toISOString();
         setPlanStatus('failed');
@@ -563,11 +578,11 @@ export function useTaskWorkflow() {
     const hasOutputs = Array.isArray(latestOutputs) && latestOutputs.length > 0;
 
     if (!complaintValue) {
-      setComplaintError('クレーム内容を入力してください。');
+      setComplaintError(validationMessages.emptyComplaint);
       return;
     }
     if (!baseSessionId || !hasOutputs) {
-      setComplaintError('再編集できる生成物が見つかりません。');
+      setComplaintError(validationMessages.noOutputs);
       return;
     }
     if (isSubmittingComplaint || isSubmitting) {
@@ -608,7 +623,7 @@ export function useTaskWorkflow() {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
-        const message = payload?.error || '再編集のリクエストに失敗しました。';
+        const message = payload?.error || errorMessages.revisionFailed;
         setComplaintError(message);
         if (payload) {
           const recordedAt = payload.submittedAt || submittedAt;
@@ -641,7 +656,7 @@ export function useTaskWorkflow() {
       }
 
       if (!payload) {
-        throw new Error('サーバーから空の応答が返されました。');
+        throw new Error(errorMessages.parseEmpty);
       }
 
       const recordedAt = payload.submittedAt || submittedAt;
@@ -694,8 +709,8 @@ export function useTaskWorkflow() {
   const complaintButtonDisabled =
     isSubmitting || isSubmittingComplaint || !canSubmitRevision || complaintTextTrimmed.length === 0;
   const complaintHelperMessage = canSubmitRevision
-    ? '最新の生成物に対するクレーム内容を記入してください。'
-    : '修正リクエストは生成物が確認できる状態で利用できます。';
+    ? helperMessages.withOutputs
+    : helperMessages.withoutOutputs;
 
   const handleComplaintChange = useCallback(
     (value) => {

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../src/App.jsx';
+import { MESSAGES } from '../../src/i18n/messages.js';
 
 describe('修正リクエストフロー', () => {
   afterEach(() => {
@@ -11,25 +12,23 @@ describe('修正リクエストフロー', () => {
     vi.restoreAllMocks();
   });
 
-  it('生成物がない場合は修正リクエストボタンが無効', async () => {
+  it('生成物がない場合は修正リクエストボタンが無効になる', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const complaintField = screen.getByPlaceholderText(
-      '例: 出力された動画が指定より暗いので明るさを調整してください。'
-    );
-    await user.type(complaintField, '仕上がりに不満があります');
+    const complaintField = screen.getByPlaceholderText(MESSAGES.latestOutputs.complaintPlaceholder);
+    await user.type(complaintField, '生成物にノイズが乗ってしまいました');
 
-    const complaintButton = screen.getByRole('button', { name: '再編集を依頼' });
+    const complaintButton = screen.getByRole('button', { name: MESSAGES.latestOutputs.complaintButton });
     expect(complaintButton).toBeDisabled();
-    expect(screen.getByText('修正リクエストは生成物が確認できる状態で利用できます。')).toBeInTheDocument();
+    expect(screen.getByText(MESSAGES.complaint.helperWithoutOutputs)).toBeInTheDocument();
   });
 
-  it('最新の生成物から修正リクエストを送信できる', async () => {
+  it('最新の生成物に対して修正リクエストを送信できる', async () => {
     const taskPayload = {
       sessionId: 'session-1',
       submittedAt: '2024-01-10T00:00:00.000Z',
-      task: '最初のタスク',
+      task: 'テスト用タスク',
       plan: {
         overview: '',
         followUp: '',
@@ -62,7 +61,7 @@ describe('修正リクエストフロー', () => {
       sessionId: 'session-2',
       parentSessionId: 'session-1',
       submittedAt: '2024-01-11T00:00:00.000Z',
-      task: '最初のタスク',
+      task: 'テスト用タスク',
       plan: taskPayload.plan,
       result: taskPayload.result,
       phases: [],
@@ -71,7 +70,7 @@ describe('修正リクエストフロー', () => {
       detail: null,
       debug: null,
       responseText: null,
-      complaint: 'もっと明るくしてください。'
+      complaint: 'もう少し明るくしてください。'
     };
 
     const mockFetch = vi.fn((url) => {
@@ -94,39 +93,38 @@ describe('修正リクエストフロー', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const taskField = screen.getByLabelText('目的 / 指示');
-    await user.type(taskField, '最初のタスク');
-    await user.click(screen.getByRole('button', { name: '送信する' }));
+    const taskField = screen.getByLabelText(MESSAGES.taskForm.taskLabel);
+    await user.type(taskField, 'テスト用タスク');
+    await user.click(screen.getByRole('button', { name: MESSAGES.taskForm.submit }));
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledWith(
-      '/api/tasks',
-      expect.objectContaining({ method: 'POST' })
-    ));
-
-    await screen.findByRole('heading', { name: '最新の結果' });
-    const complaintField = screen.getByPlaceholderText(
-      '例: 出力された動画が指定より暗いので明るさを調整してください。'
+    await waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith('/api/tasks', expect.objectContaining({ method: 'POST' }))
     );
-    await user.type(complaintField, 'もっと明るくしてください。');
 
-    const complaintButton = screen.getByRole('button', { name: '再編集を依頼' });
+    await screen.findByRole('heading', { name: MESSAGES.app.sections.latestResult });
+    const complaintField = screen.getByPlaceholderText(MESSAGES.latestOutputs.complaintPlaceholder);
+    await user.type(complaintField, revisionPayload.complaint);
+
+    const complaintButton = screen.getByRole('button', { name: MESSAGES.latestOutputs.complaintButton });
     await waitFor(() => expect(complaintButton).toBeEnabled());
 
     await user.click(complaintButton);
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledWith(
-      '/api/revisions',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({ 'Content-Type': 'application/json' })
-      })
-    ));
+    await waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/revisions',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ 'Content-Type': 'application/json' })
+        })
+      )
+    );
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
-    const latestHeader = await screen.findByRole('heading', { name: '最新の結果' });
+    const latestHeader = await screen.findByRole('heading', { name: MESSAGES.app.sections.latestResult });
     expect(latestHeader).toBeInTheDocument();
-    expect(screen.getByText('再編集')).toBeInTheDocument();
-    expect(screen.getByText('もっと明るくしてください。')).toBeInTheDocument();
+    expect(screen.getByText(MESSAGES.result.revisionChip)).toBeInTheDocument();
+    expect(screen.getByText(revisionPayload.complaint)).toBeInTheDocument();
   });
 });

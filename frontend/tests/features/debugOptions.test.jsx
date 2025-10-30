@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../src/App.jsx';
+import { MESSAGES } from '../../src/i18n/messages.js';
 
 describe('デバッグオプション', () => {
   afterEach(() => {
@@ -37,8 +38,8 @@ describe('デバッグオプション', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const dryRunCheckbox = screen.getByLabelText('ドライラン（コマンド実行をスキップ）');
-    const debugCheckbox = screen.getByLabelText('プラン生成のデバッグ情報を含める（生レスポンス含む）');
+    const dryRunCheckbox = screen.getByLabelText(MESSAGES.taskForm.dryRunLabel);
+    const debugCheckbox = screen.getByLabelText(MESSAGES.taskForm.debugVerboseLabel);
 
     expect(dryRunCheckbox).not.toBeChecked();
     expect(debugCheckbox).not.toBeChecked();
@@ -49,31 +50,31 @@ describe('デバッグオプション', () => {
     expect(dryRunCheckbox).toBeChecked();
     expect(debugCheckbox).toBeChecked();
 
-    const taskField = screen.getByLabelText('目的 / 指示');
+    const taskField = screen.getByLabelText(MESSAGES.taskForm.taskLabel);
     await user.type(taskField, 'テスト');
 
-    await user.click(screen.getByRole('button', { name: '送信する' }));
+    await user.click(screen.getByRole('button', { name: MESSAGES.taskForm.submit }));
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
 
     expect(mockFetch.mock.calls[0][0]).toBe('/api/tasks?debug=verbose&dryRun=true');
   });
 
-  it('デバッグオプションを折りたたむとチェックボックスが非表示になる', async () => {
+  it('デバッグオプションを閉じるとチェックボックスが非表示になる', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const headerToggle = screen.getByLabelText('デバッグオプション');
-    expect(screen.getByLabelText('ドライラン（コマンド実行をスキップ）')).toBeInTheDocument();
+    const headerToggle = screen.getByLabelText(MESSAGES.taskForm.debugOptionsTitle);
+    expect(screen.getByLabelText(MESSAGES.taskForm.dryRunLabel)).toBeInTheDocument();
 
     await user.click(headerToggle);
 
     expect(headerToggle).not.toBeChecked();
-    expect(screen.queryByLabelText('ドライラン（コマンド実行をスキップ）')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(MESSAGES.taskForm.dryRunLabel)).not.toBeInTheDocument();
 
     await user.click(headerToggle);
 
     expect(headerToggle).toBeChecked();
-    expect(screen.getByLabelText('プラン生成のデバッグ情報を含める（生レスポンス含む）')).toBeInTheDocument();
+    expect(screen.getByLabelText(MESSAGES.taskForm.debugVerboseLabel)).toBeInTheDocument();
   });
 });

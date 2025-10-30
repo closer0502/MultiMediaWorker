@@ -1,4 +1,6 @@
 import { quoteArgument } from './formatters.js';
+import { MESSAGES } from '../i18n/messages.js';
+const PLAN_MESSAGES = MESSAGES.plan;
 
 /**
  * @typedef {Object} ClientCommandOutput
@@ -47,7 +49,9 @@ export function buildPlanSummary(plan) {
     return '';
   }
 
-  return normalized.steps.map((step, index) => `${index + 1}）${formatStepCommand(step)}`).join(' / ');
+  return normalized.steps
+    .map((step, index) => `${PLAN_MESSAGES.summaryStepPrefix(index)}${formatStepCommand(step)}`)
+    .join(PLAN_MESSAGES.summarySeparator);
 }
 
 /**
@@ -97,22 +101,22 @@ export function formatStepCommand(step) {
  */
 export function formatStepStatus(step) {
   if (!step || !step.status) {
-    return '不明';
+    return PLAN_MESSAGES.unknown;
   }
 
   if (step.status === 'executed') {
     const parts = [];
     if (step.exitCode !== null && step.exitCode !== undefined) {
-      parts.push(`終了コード ${step.exitCode}`);
+      parts.push(`${PLAN_MESSAGES.exitCodeLabel} ${step.exitCode}`);
     }
     if (step.timedOut) {
-      parts.push('タイムアウト');
+      parts.push(PLAN_MESSAGES.timedOutLabel);
     }
-    return parts.length ? `実行済み（${parts.join(' / ')}）` : '実行済み';
+    return parts.length ? PLAN_MESSAGES.executedWithMeta(parts.join(' / ')) : PLAN_MESSAGES.executed;
   }
 
   if (step.status === 'skipped') {
-    return 'スキップ';
+    return PLAN_MESSAGES.skip;
   }
 
   return step.status;
@@ -121,13 +125,13 @@ export function formatStepStatus(step) {
 export function describeSkipReason(reason) {
   switch (reason) {
     case 'dry_run':
-      return 'ドライランモードが有効です。';
+      return PLAN_MESSAGES.dryRunDescription;
     case 'previous_step_failed':
-      return '前のステップが失敗しました。';
+      return PLAN_MESSAGES.previousFailedDescription;
     case 'no_op_command':
-      return 'コマンドが \"none\" に設定されています。';
+      return PLAN_MESSAGES.noOpDescription;
     default:
-      return reason ? reason.replace(/_/g, ' ') : '追加情報はありません。';
+      return reason ? reason.replace(/_/g, ' ') : PLAN_MESSAGES.noAdditionalInfo;
   }
 }
 
@@ -157,3 +161,4 @@ function normalizePlanStep(step) {
     note
   };
 }
+

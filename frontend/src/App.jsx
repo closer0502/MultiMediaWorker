@@ -7,6 +7,7 @@ import ResultView from './components/result/ResultView.jsx';
 import TaskForm from './components/TaskForm/TaskForm.jsx';
 import { useTaskWorkflow } from './hooks/useTaskWorkflow.js';
 import { useProgressPreview } from './hooks/useProgressPreview.js';
+import { MESSAGES } from './i18n/messages.js';
 
 export default function App() {
   const {
@@ -49,18 +50,19 @@ export default function App() {
   const progressModalStage = progressPreview.enabled ? progressPreview.stage : progressStage;
   const progressModalLogs = progressPreview.enabled ? progressPreview.logs : liveLogs;
 
+  const { app } = MESSAGES;
   const showErrorBanner =
     !isSubmitting &&
     planStatus === 'failed' &&
     Boolean(planError?.message || (latestEntry && latestEntry.status === 'failed'));
   const errorBannerMessage =
-    planError?.message || latestEntry?.error || error || 'プラン実行に失敗しました。';
+    planError?.message || latestEntry?.error || error || app.errors.planFailed;
 
   return (
     <div className="app">
       <header className="header">
-        <h1>MultiMedia Worker</h1>
-        <p>自然言語で指示すると、実行可能な ffmpeg / ImageMagick / ExifTool / yt-dlp コマンドを生成します。</p>
+        <h1>{app.header.title}</h1>
+        <p>{app.header.description}</p>
       </header>
 
       <main className="content">
@@ -103,14 +105,14 @@ export default function App() {
 
         {latestEntry && (
           <section className="panel">
-            <h2>最新の結果</h2>
+            <h2>{app.sections.latestResult}</h2>
             <ResultView entry={latestEntry} />
           </section>
         )}
 
         {history.length > 1 && (
           <section className="panel">
-            <h2>履歴</h2>
+            <h2>{app.sections.history}</h2>
             <HistoryList entries={history.slice(1)} />
           </section>
         )}
