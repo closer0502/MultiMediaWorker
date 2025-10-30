@@ -140,6 +140,9 @@ export const MESSAGES = {
     noAdditionalInfo: '追加情報はありません。',
     outputFallback: '出力',
     stepLabel: (index) => `ステップ ${index + 1}`,
+    copyCommand: 'コマンドをコピー',
+    copyCommandCopied: 'コピーしました',
+    copyCommandAria: (title) => `${title} のコマンドをコピー`,
     skipReasonPrefix: 'スキップ理由: '
   },
   process: {

@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import StepStatusBadge from './StepStatusBadge.jsx';
 import { describeSkipReason, formatStepCommand } from '../../utils/plan.js';
 import { MESSAGES } from '../../i18n/messages.js';
@@ -8,6 +9,42 @@ export default function PlanStepList({ steps, results }) {
   }
 
   const planMessages = MESSAGES.plan;
+  const [copiedIndex, setCopiedIndex] = useState(null);
+  const copyTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyClick = useCallback(async (text, index) => {
+    if (!text) {
+      return;
+    }
+
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.clipboard ||
+      typeof navigator.clipboard.writeText !== 'function'
+    ) {
+      console.warn('Clipboard API is not available in this environment.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndex(index);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy plan step command to clipboard.', error);
+    }
+  }, []);
 
   return (
     <ol className="plan-step-list">
@@ -15,6 +52,8 @@ export default function PlanStepList({ steps, results }) {
         const stepResult = Array.isArray(results) ? results[index] : undefined;
         const title = step.title || planMessages.stepLabel(index);
         const key = step.id || `${step.command || 'unknown'}-${index}`;
+        const commandText = formatStepCommand(step);
+        const isCopied = copiedIndex === index;
 
         return (
           <li key={key} className="plan-step-item">
@@ -22,7 +61,19 @@ export default function PlanStepList({ steps, results }) {
               <strong>{title}</strong>
               <StepStatusBadge result={stepResult} />
             </div>
-            <code className="command-line small">{formatStepCommand(step)}</code>
+            <div className="plan-step-command">
+              <code className="command-line small">{commandText}</code>
+              {commandText && (
+                <button
+                  type="button"
+                  className="copy-button"
+                  onClick={() => handleCopyClick(commandText, index)}
+                  aria-label={planMessages.copyCommandAria(title)}
+                >
+                  {isCopied ? planMessages.copyCommandCopied : planMessages.copyCommand}
+                </button>
+              )}
+            </div>
             {step.reasoning && <p className="note">{step.reasoning}</p>}
             {step.note && <p className="note">{step.note}</p>}
             {Array.isArray(step.outputs) && step.outputs.length > 0 && (
