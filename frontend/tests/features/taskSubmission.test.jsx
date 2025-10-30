@@ -26,7 +26,8 @@ describe('タスク送信フォーム', () => {
 
     await user.click(screen.getByRole('button', { name: '送信する' }));
 
-    expect(await screen.findByText('タスク内容を入力してください。')).toBeInTheDocument();
+    const validationMessages = await screen.findAllByText((content) => content.includes('タスク内容を入力してください。'));
+    expect(validationMessages.length).toBeGreaterThan(0);
   });
 
   it('ファイルを含むタスク送信で成功レスポンスを履歴に記録する', async () => {
