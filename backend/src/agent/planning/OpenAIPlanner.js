@@ -70,6 +70,8 @@ export class OpenAIPlanner {
       include: ['reasoning.encrypted_content', 'web_search_call.action.sources']
     };
 
+    console.log('[planner request]', JSON.stringify(responsePayload, null, 2));
+
     const response = await this.client.responses.create(responsePayload);
 
     const responseText = ResponseParser.extractText(response);
@@ -84,13 +86,13 @@ export class OpenAIPlanner {
 
     const debug = options.debug
       ? {
-          model: this.model,
-          developerPrompt,
-          requestPayload: safeSerialize(responsePayload),
-          responseText,
-          parsed: normalized,
-          rawResponse: options.includeRawResponse ? safeSerialize(response) : undefined
-        }
+        model: this.model,
+        developerPrompt,
+        requestPayload: safeSerialize(responsePayload),
+        responseText,
+        parsed: normalized,
+        rawResponse: options.includeRawResponse ? safeSerialize(response) : undefined
+      }
       : undefined;
 
     try {

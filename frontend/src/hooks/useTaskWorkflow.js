@@ -20,6 +20,261 @@ function createFileIdentityKey(file) {
   return `${name}::${size}::${lastModified}`;
 }
 
+/**
+ * Build an instruction string for retrying after a failed task.
+ * @param {string} originalTask
+ * @param {{message?: string, payload?: Record<string, any>}} failureContext
+ * @returns {string}
+ */
+function buildErrorRetryTask(originalTask, failureContext) {
+  const baseTask = originalTask || '（元の依頼内容を取得できませんでした）';
+  const failureLines = [];
+  const failureMessage = typeof failureContext?.message === 'string' ? failureContext.message.trim() : '';
+  if (failureMessage) {
+    failureLines.push(failureMessage);
+  }
+  const payload = failureContext?.payload;
+  const detail = typeof payload?.detail === 'string' ? payload.detail.trim() : '';
+  if (detail && detail !== failureMessage) {
+    failureLines.push(detail);
+  }
+
+  const responseText = typeof payload?.responseText === 'string' ? payload.responseText.trim() : '';
+  if (responseText) {
+    failureLines.push(`LLM 応答:\n${truncateForPrompt(responseText, 1200)}`);
+  }
+
+  const result = payload?.result;
+  const workflowSummary = formatWorkflowPhases(Array.isArray(payload?.phases) ? payload.phases : null);
+  if (workflowSummary) {
+    failureLines.push(`ワークフロー:\n${workflowSummary}`);
+  }
+
+  const commandPlanSummary = formatCommandPlan(payload?.plan ?? payload?.rawPlan ?? null);
+  if (commandPlanSummary) {
+    failureLines.push(`コマンドプラン:\n${commandPlanSummary}`);
+  }
+
+  const failingStep = findFirstFailingStep(Array.isArray(result?.steps) ? result.steps : null);
+  if (failingStep) {
+    const exitInfo = [];
+    if (typeof failingStep.exitCode === 'number') {
+      exitInfo.push(`exitCode=${failingStep.exitCode}`);
+    }
+    if (failingStep.timedOut) {
+      exitInfo.push('timed_out=true');
+    }
+    const infoSuffix = exitInfo.length ? ` (${exitInfo.join(', ')})` : '';
+    const commandLine = formatCommandLineFromStep(failingStep);
+    failureLines.push(`失敗したコマンド: ${commandLine}${infoSuffix}`);
+    const stderr = typeof failingStep.stderr === 'string' ? failingStep.stderr.trim() : '';
+    if (stderr) {
+      failureLines.push(`stderr (抜粋):\n${truncateForPrompt(stderr, 1200)}`);
+    }
+    const stdout = typeof failingStep.stdout === 'string' ? failingStep.stdout.trim() : '';
+    if (stdout) {
+      failureLines.push(`stdout (抜粋):\n${truncateForPrompt(stdout, 600)}`);
+    }
+  }
+
+  const aggregatedStderr = typeof result?.stderr === 'string' ? result.stderr.trim() : '';
+  if (aggregatedStderr) {
+    failureLines.push(`集約 stderr:\n${truncateForPrompt(aggregatedStderr, 1200)}`);
+  }
+
+  if (failureLines.length === 0) {
+    failureLines.push('エラーの詳細は取得できませんでした。');
+  }
+
+  return [
+    'エラー再編集リクエストです。',
+    `元の依頼内容:\n${baseTask}`,
+    '直近のエラー記録:',
+    failureLines.join('\n\n'),
+    '上記の問題を解消し、正しい成果物を生成してください。必要に応じて前回の成果物ファイルやログを参照しても構いません。'
+  ].join('\n\n');
+}
+
+/**
+ * @param {Array<Record<string, any>>|null} steps
+ * @returns {Record<string, any>|null}
+ */
+function findFirstFailingStep(steps) {
+  if (!Array.isArray(steps)) {
+    return null;
+  }
+  return (
+    steps.find(
+      (step) =>
+        step &&
+        step.status === 'executed' &&
+        (step.timedOut || (typeof step.exitCode === 'number' && step.exitCode !== 0))
+    ) || null
+  );
+}
+
+/**
+ * @param {Record<string, any>} step
+ * @returns {string}
+ */
+function formatCommandLineFromStep(step) {
+  if (!step) {
+    return '(不明なコマンド)';
+  }
+  const command = typeof step.command === 'string' && step.command ? step.command : '(不明なコマンド)';
+  const args = Array.isArray(step.arguments)
+    ? step.arguments.filter((arg) => typeof arg === 'string' && arg.trim())
+    : [];
+  return [command, ...args].join(' ').trim();
+}
+
+/**
+ * @param {string} value
+ * @param {number} maxLength
+ * @returns {string}
+ */
+function truncateForPrompt(value, maxLength = 1200) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength)}…(省略)`;
+}
+
+/**
+ * @param {Array<Record<string, any>>|null} phases
+ * @returns {string}
+ */
+function formatWorkflowPhases(phases) {
+  if (!Array.isArray(phases) || phases.length === 0) {
+    return '';
+  }
+  const lines = phases.map((phase) => {
+    const title = typeof phase?.title === 'string' && phase.title ? phase.title : phase?.id || '(不明なフェーズ)';
+    const status = phase?.status || 'unknown';
+    const segments = [`[${status}] ${title}`];
+
+    const metaSummary = summarizePhaseMeta(phase?.meta);
+    if (metaSummary) {
+      segments.push(metaSummary);
+    }
+
+    const errorMessage =
+      typeof phase?.error?.message === 'string' && phase.error.message ? truncateForPrompt(phase.error.message.trim(), 200) : '';
+    if (errorMessage) {
+      segments.push(`error: ${errorMessage}`);
+    }
+
+    const logCount = Array.isArray(phase?.logs) ? phase.logs.length : 0;
+    if (logCount > 0) {
+      segments.push(`logs: ${logCount}`);
+    }
+
+    return `- ${segments.join(' / ')}`;
+  });
+  return lines.join('\n');
+}
+
+/**
+ * @param {Record<string, any>} meta
+ * @returns {string}
+ */
+function summarizePhaseMeta(meta) {
+  if (!meta || typeof meta !== 'object') {
+    return '';
+  }
+  const parts = Object.entries(meta)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .map(([key, value]) => {
+      const display = truncateForPrompt(stringifyMetaValue(value), 120);
+      return `${key}=${display}`;
+    });
+  return parts.length ? parts.join(', ') : '';
+}
+
+/**
+ * @param {any} value
+ * @returns {string}
+ */
+function stringifyMetaValue(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => stringifyMetaValue(item)).join('/');
+  }
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[object]';
+    }
+  }
+  return '';
+}
+
+/**
+ * @param {Record<string, any>|null} plan
+ * @returns {string}
+ */
+function formatCommandPlan(plan) {
+  if (!plan || typeof plan !== 'object') {
+    return '';
+  }
+  const lines = [];
+  const overview = typeof plan.overview === 'string' ? plan.overview.trim() : '';
+  if (overview) {
+    lines.push(`概要: ${truncateForPrompt(overview, 240)}`);
+  }
+  const steps = Array.isArray(plan.steps) ? plan.steps : [];
+  if (steps.length === 0) {
+    return lines.length ? lines.join('\n') : '';
+  }
+  const stepLines = steps.map((step, index) => {
+    const commandLine = formatCommandLineFromStep(step);
+    const reasoning = typeof step?.reasoning === 'string' && step.reasoning.trim()
+      ? ` — 理由: ${truncateForPrompt(step.reasoning.trim(), 200)}`
+      : '';
+    const outputs = describePlannedOutputs(Array.isArray(step?.outputs) ? step.outputs : []);
+    const segments = [`${index + 1}. ${commandLine}${reasoning}`];
+    if (outputs) {
+      segments.push(`出力: ${outputs}`);
+    }
+    return segments.join(' / ');
+  });
+  lines.push(...stepLines);
+  const followUp = typeof plan.followUp === 'string' ? plan.followUp.trim() : '';
+  if (followUp) {
+    lines.push(`追加メモ: ${truncateForPrompt(followUp, 200)}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * @param {Array<Record<string, any>>} outputs
+ * @returns {string}
+ */
+function describePlannedOutputs(outputs) {
+  if (!Array.isArray(outputs) || outputs.length === 0) {
+    return '';
+  }
+  const entries = outputs
+    .slice(0, 3)
+    .map((entry) => {
+      const path = typeof entry?.path === 'string' ? entry.path : '';
+      const description = typeof entry?.description === 'string' ? entry.description : '';
+      const combined = [path, description].filter(Boolean).join(' - ');
+      return truncateForPrompt(combined || '(不明な出力)', 160);
+    });
+  const suffix = outputs.length > 3 ? ` …他${outputs.length - 3}件` : '';
+  return `${entries.join(', ')}${suffix}`;
+}
+
 export function useTaskWorkflow() {
   const [task, setTask] = useState('');
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -537,13 +792,14 @@ export function useTaskWorkflow() {
       dryRun: Boolean(snapshot.options?.dryRun)
     };
 
-    setTask(snapshot.task);
+    const retryTask = buildErrorRetryTask(snapshot.task, planError);
+    setTask(retryTask);
     setSelectedFiles(previousFiles);
     setDebugEnabled(normalizedOptions.debugEnabled);
     setDryRun(normalizedOptions.dryRun);
 
     await submitTaskRequest({
-      taskInput: snapshot.task,
+      taskInput: retryTask,
       files: previousFiles,
       options: normalizedOptions
     });
