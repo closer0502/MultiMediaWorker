@@ -807,6 +807,47 @@ video.output-preview-media {
   font-size: 0.85rem;
 }
 
+.plan-step-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.plan-step-command .command-line {
+  flex: 1 1 auto;
+  margin: 0;
+  width: 100%;
+}
+
+.copy-button {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--color-border-muted-rgb), 0.4);
+  background: rgba(var(--color-overlay-strong-rgb), 0.9);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.copy-button:hover {
+  background: rgba(var(--color-accent-rgb), 0.15);
+  border-color: rgba(var(--color-accent-rgb), 0.5);
+}
+
+.copy-button:active {
+  transform: translateY(1px);
+}
+
+.copy-button:focus-visible {
+  outline: 2px solid rgba(var(--color-info-accent-rgb), 0.6);
+  outline-offset: 2px;
+}
+
 .note {
   color: var(--color-text-muted);
 }
