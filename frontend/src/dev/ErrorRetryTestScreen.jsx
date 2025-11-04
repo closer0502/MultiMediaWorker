@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import TaskForm from '../components/TaskForm/TaskForm.jsx';
 import LatestOutputsPanel from '../components/LatestOutputsPanel.jsx';
-import { buildErrorRetryTask } from '../hooks/useTaskWorkflow.js';
+import { buildErrorRetryTask, summarizeFailureContext } from '../hooks/useTaskWorkflow.js';
 import { MESSAGES } from '../i18n/messages.js';
 
 const ORIGINAL_TASK_DEFAULT = 'sample.png を 256x256 にリサイズし、WebP に変換してください。';
@@ -37,32 +37,15 @@ export default function ErrorRetryTestScreen() {
   const [showDebugOptions, setShowDebugOptions] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [dryRun, setDryRun] = useState(false);
-  const [lastSubmittedTask, setLastSubmittedTask] = useState('');
   const [failureIteration, setFailureIteration] = useState(1);
-
-  const appendAttemptNote = (text, label) => {
-    if (failureIteration <= 1) {
-      return text;
-    }
-    const base = typeof text === 'string' ? text : '';
-    const note = `[試行${failureIteration}回目] ${label}`;
-    if (!base) {
-      return note;
-    }
-    return base.includes(note) ? base : `${base}\n${note}`;
-  };
-
-  const contextualFailureDetail = appendAttemptNote(failureDetail, '最新の失敗メッセージ');
-  const contextualStepStderr = appendAttemptNote(stepStderr, 'コマンド stderr 抜粋');
-  const contextualAggregatedStderr = appendAttemptNote(aggregatedStderr, '集約 stderr');
-  const contextualResponseText = appendAttemptNote(responseText, 'AI からの応答要約');
+  const [historyEntries, setHistoryEntries] = useState([]);
 
   const failureContext = useMemo(
     () => ({
-      message: contextualFailureDetail,
+      message: failureDetail,
       payload: {
-        detail: contextualFailureDetail,
-        responseText: contextualResponseText,
+        detail: failureDetail,
+        responseText,
         phases: [
           { id: 'plan', status: 'success', title: 'Plan' },
           { id: 'execute', status: 'failed', title: 'Execute' }
@@ -87,7 +70,7 @@ export default function ErrorRetryTestScreen() {
           exitCode: 1,
           timedOut: false,
           stdout: '',
-          stderr: contextualAggregatedStderr,
+          stderr: aggregatedStderr,
           resolvedOutputs: [],
           dryRun: false,
           steps: [
@@ -98,23 +81,39 @@ export default function ErrorRetryTestScreen() {
               exitCode: 1,
               timedOut: false,
               stdout: '',
-              stderr: contextualStepStderr
+              stderr: stepStderr
             }
           ]
         }
       }
     }),
-    [contextualAggregatedStderr, contextualFailureDetail, contextualResponseText, contextualStepStderr]
+    [aggregatedStderr, failureDetail, responseText, stepStderr]
   );
 
   const helperMessages = MESSAGES.workflow.helper;
 
+  const simulateSubmission = useCallback(() => {
+    const summary = summarizeFailureContext(failureContext);
+    setHistoryEntries((previous) => [
+      { attemptNumber: failureIteration, summary },
+      ...previous.filter((entry) => entry?.attemptNumber !== failureIteration)
+    ]);
+    setFailureIteration((previous) => previous + 1);
+    setShowErrorBanner(true);
+  }, [failureContext, failureIteration]);
+
   const handleRetryFromError = () => {
-    const baseTask = lastSubmittedTask || taskValue || originalTask;
-    const prompt = buildErrorRetryTask(baseTask, failureContext);
+    const contextForBuilder = {
+      ...failureContext,
+      history: historyEntries,
+      attemptNumber: failureIteration,
+      attemptLabel: `${failureIteration}回目`
+    };
+    const prompt = buildErrorRetryTask(originalTask, contextForBuilder);
     setTaskValue(prompt);
     setLatestPrompt(prompt);
     setShowErrorBanner(true);
+    simulateSubmission();
   };
 
   const handleResetScenario = () => {
@@ -127,8 +126,8 @@ export default function ErrorRetryTestScreen() {
     setLatestPrompt('');
     setShowErrorBanner(true);
     setSelectedFiles([]);
-    setLastSubmittedTask('');
     setFailureIteration(1);
+    setHistoryEntries([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -151,10 +150,7 @@ export default function ErrorRetryTestScreen() {
 
   const handleSubmitTaskForm = (event) => {
     event.preventDefault();
-    setLastSubmittedTask(taskValue);
-    setFailureIteration((previous) => previous + 1);
-    setLatestPrompt('');
-    setShowErrorBanner(true);
+    simulateSubmission();
   };
 
   return (
@@ -183,9 +179,6 @@ export default function ErrorRetryTestScreen() {
                 setOriginalTask(nextValue);
                 if (!latestPrompt) {
                   setTaskValue(nextValue);
-                }
-                if (!lastSubmittedTask) {
-                  setLastSubmittedTask(nextValue);
                 }
               }}
               rows={3}
@@ -259,7 +252,7 @@ export default function ErrorRetryTestScreen() {
             isSubmitting={false}
             outputs={[]}
             showErrorBanner={showErrorBanner}
-            errorMessage={contextualFailureDetail}
+            errorMessage={failureDetail}
             onRetryFromError={handleRetryFromError}
             complaintText=""
             complaintError=""

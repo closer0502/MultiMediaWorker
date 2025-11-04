@@ -259,7 +259,10 @@ describe('エラーバナーのリトライフロー', () => {
     const retryTask = retryFormData.get('task');
     expect(retryTask).toBeTruthy();
     expect(retryTask).not.toBe(originalTask);
-    expect(retryTask).toContain(originalTask);
+    expect(retryTask.startsWith('エラー再編集リクエストです。')).toBe(true);
+    expect(retryTask).toContain(`元の依頼内容:\n${originalTask}`);
+    expect(retryTask).toContain('エラー履歴:');
+    expect(retryTask).toContain('"最新"');
     expect(retryTask).toContain(failurePayload.detail);
     expect(retryTask).toContain(failurePayload.responseText);
     expect(retryTask).toContain(failurePayload.result.steps[0].stderr);

@@ -26,17 +26,34 @@ function createFileIdentityKey(file) {
  * @param {{message?: string, payload?: Record<string, any>}} failureContext
  * @returns {string}
  */
-export function buildErrorRetryTask(originalTask, failureContext) {
-  const baseTask = originalTask || '（元の依頼内容を取得できませんでした）';
+function normalizeOriginalTask(taskText) {
+  const trimmed = typeof taskText === 'string' ? taskText.trim() : '';
+  if (!trimmed) {
+    return '（元の依頼内容を取得できませんでした）';
+  }
+  const header = '元の依頼内容:';
+  if (trimmed.startsWith('エラー再編集リクエストです。') && trimmed.includes(header)) {
+    const afterHeader = trimmed.slice(trimmed.indexOf(header) + header.length).trim();
+    if (!afterHeader) {
+      return trimmed;
+    }
+    const separatorIndex = afterHeader.indexOf('\n\n');
+    const candidate = (separatorIndex !== -1 ? afterHeader.slice(0, separatorIndex) : afterHeader).trim();
+    return candidate || trimmed;
+  }
+  return trimmed;
+}
+
+export function summarizeFailureContext(failureContext) {
   const failureLines = [];
   const failureMessage = typeof failureContext?.message === 'string' ? failureContext.message.trim() : '';
   if (failureMessage) {
-    failureLines.push(failureMessage);
+    failureLines.push(`最新の失敗メッセージ:\n${failureMessage}`);
   }
   const payload = failureContext?.payload;
   const detail = typeof payload?.detail === 'string' ? payload.detail.trim() : '';
   if (detail && detail !== failureMessage) {
-    failureLines.push(detail);
+    failureLines.push(`追加情報:\n${detail}`);
   }
 
   const responseText = typeof payload?.responseText === 'string' ? payload.responseText.trim() : '';
@@ -86,13 +103,61 @@ export function buildErrorRetryTask(originalTask, failureContext) {
     failureLines.push('エラーの詳細は取得できませんでした。');
   }
 
+  return failureLines.join('\n\n');
+}
+
+export function buildErrorRetryTask(originalTask, failureContext) {
+  const baseTask = normalizeOriginalTask(originalTask);
+  const previousHistory = Array.isArray(failureContext?.history) ? failureContext.history : [];
+  const attemptLabel =
+    typeof failureContext?.attemptLabel === 'string'
+      ? failureContext.attemptLabel
+      : typeof failureContext?.attemptNumber === 'number'
+      ? `${failureContext.attemptNumber}回目`
+      : '最新';
+
+  const currentSummary = summarizeFailureContext(failureContext);
+  const historyList = [];
+  const seenLabels = new Set();
+
+  const pushEntry = (label, summary) => {
+    if (!label || !summary || seenLabels.has(label)) {
+      return;
+    }
+    seenLabels.add(label);
+    historyList.push([label, summary]);
+  };
+
+  pushEntry(attemptLabel, currentSummary);
+
+  for (const entry of previousHistory) {
+    if (!entry) {
+      continue;
+    }
+    const label =
+      typeof entry.label === 'string'
+        ? entry.label
+        : typeof entry.attemptNumber === 'number'
+        ? `${entry.attemptNumber}回目`
+        : null;
+    const summary = typeof entry.summary === 'string' ? entry.summary.trim() : '';
+    pushEntry(label, summary);
+  }
+
+  const historyObject = Object.fromEntries(historyList);
+  const historyJson = JSON.stringify(historyObject, null, 2);
+
   return [
     'エラー再編集リクエストです。',
-    `元の依頼内容:\n${baseTask}`,
-    '直近のエラー記録:',
-    failureLines.join('\n\n'),
+    '',
+    '元の依頼内容:',
+    baseTask,
+    '',
+    'エラー履歴:',
+    historyJson,
+    '',
     '上記の問題を解消し、正しい成果物を生成してください。必要に応じて前回の成果物ファイルやログを参照しても構いません。'
-  ].join('\n\n');
+  ].join('\n');
 }
 
 /**
