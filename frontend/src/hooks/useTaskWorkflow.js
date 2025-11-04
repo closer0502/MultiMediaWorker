@@ -26,7 +26,7 @@ function createFileIdentityKey(file) {
  * @param {{message?: string, payload?: Record<string, any>}} failureContext
  * @returns {string}
  */
-function buildErrorRetryTask(originalTask, failureContext) {
+export function buildErrorRetryTask(originalTask, failureContext) {
   const baseTask = originalTask || '（元の依頼内容を取得できませんでした）';
   const failureLines = [];
   const failureMessage = typeof failureContext?.message === 'string' ? failureContext.message.trim() : '';

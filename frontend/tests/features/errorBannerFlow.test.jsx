@@ -136,4 +136,135 @@ describe('エラーバナーのリトライフロー', () => {
     await waitFor(() => expect(document.querySelector('.error-banner')).toBeNull());
     expect(await screen.findByRole('heading', { name: MESSAGES.app.sections.latestResult })).toBeInTheDocument();
   });
+
+  it('エラーから再編集ボタン押下で再送信用プロンプトが含まれた依頼を送信する', async () => {
+    class MockFormData {
+      constructor() {
+        this.store = [];
+      }
+      append(key, value) {
+        this.store.push([key, value]);
+      }
+      get(key) {
+        const entry = this.store.find(([name]) => name === key);
+        return entry ? entry[1] : undefined;
+      }
+    }
+
+    vi.stubGlobal('FormData', MockFormData);
+
+    const originalTask = 'resize sample.png to 256x256 and convert to webp';
+    const failurePayload = {
+      status: 'failed',
+      sessionId: 'failure-session',
+      task: originalTask,
+      detail: 'Command "magick" exited with code 1.',
+      result: {
+        exitCode: 1,
+        timedOut: false,
+        stdout: '',
+        stderr: 'aggregate stderr output',
+        resolvedOutputs: [],
+        dryRun: false,
+        steps: [
+          {
+            status: 'executed',
+            command: 'magick',
+            arguments: ['convert'],
+            exitCode: 1,
+            timedOut: false,
+            stdout: '',
+            stderr: 'command line stderr details'
+          }
+        ]
+      },
+      plan: { steps: [{ command: 'magick', arguments: ['convert'] }] },
+      rawPlan: { steps: [{ command: 'magick', arguments: ['convert'] }] },
+      phases: [
+        { id: 'plan', status: 'success' },
+        { id: 'execute', status: 'failed' }
+      ],
+      responseText: 'dummy llm response text'
+    };
+
+    const successPayload = {
+      status: 'success',
+      sessionId: 'retry-success',
+      task: originalTask,
+      plan: { steps: [{ command: 'magick', arguments: ['convert'] }] },
+      rawPlan: { steps: [{ command: 'magick', arguments: ['convert'] }] },
+      result: {
+        exitCode: 0,
+        timedOut: false,
+        stdout: 'done',
+        stderr: '',
+        resolvedOutputs: [],
+        dryRun: false,
+        steps: [
+          {
+            status: 'executed',
+            command: 'magick',
+            arguments: ['convert'],
+            exitCode: 0,
+            timedOut: false,
+            stdout: 'done',
+            stderr: ''
+          }
+        ]
+      },
+      phases: [
+        { id: 'plan', status: 'success' },
+        { id: 'execute', status: 'success' }
+      ],
+      uploadedFiles: [],
+      parentSessionId: 'failure-session',
+      complaint: null,
+      submittedAt: '2024-01-11T00:00:00.000Z'
+    };
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        json: () => Promise.resolve(failurePayload)
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(successPayload)
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const taskField = screen.getByLabelText(MESSAGES.taskForm.taskLabel);
+    await user.type(taskField, originalTask);
+    await user.click(screen.getByRole('button', { name: MESSAGES.taskForm.submit }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const firstFormData = fetchMock.mock.calls[0][1].body;
+    expect(firstFormData).toBeInstanceOf(MockFormData);
+    expect(firstFormData.get('task')).toBe(originalTask);
+
+    const retryButton = await screen.findByRole('button', { name: MESSAGES.latestOutputs.errorAction });
+    await user.click(retryButton);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const retryFormData = fetchMock.mock.calls[1][1].body;
+    expect(retryFormData).toBeInstanceOf(MockFormData);
+
+    const retryTask = retryFormData.get('task');
+    expect(retryTask).toBeTruthy();
+    expect(retryTask).not.toBe(originalTask);
+    expect(retryTask).toContain(originalTask);
+    expect(retryTask).toContain(failurePayload.detail);
+    expect(retryTask).toContain(failurePayload.responseText);
+    expect(retryTask).toContain(failurePayload.result.steps[0].stderr);
+    expect(retryTask).toContain(failurePayload.result.stderr);
+
+    await waitFor(() => expect(taskField.value).toBe(retryTask));
+  });
 });

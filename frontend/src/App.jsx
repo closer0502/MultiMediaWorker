@@ -8,8 +8,17 @@ import TaskForm from './components/TaskForm/TaskForm.jsx';
 import { useTaskWorkflow } from './hooks/useTaskWorkflow.js';
 import { useProgressPreview } from './hooks/useProgressPreview.js';
 import { MESSAGES } from './i18n/messages.js';
+import ErrorRetryTestScreen from './dev/ErrorRetryTestScreen.jsx';
 
 export default function App() {
+  if (
+    import.meta.env.DEV &&
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('error-retry-test')
+  ) {
+    return <ErrorRetryTestScreen />;
+  }
+
   const {
     task,
     setTask,
