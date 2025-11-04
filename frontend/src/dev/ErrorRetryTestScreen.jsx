@@ -37,13 +37,32 @@ export default function ErrorRetryTestScreen() {
   const [showDebugOptions, setShowDebugOptions] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [dryRun, setDryRun] = useState(false);
+  const [lastSubmittedTask, setLastSubmittedTask] = useState('');
+  const [failureIteration, setFailureIteration] = useState(1);
+
+  const appendAttemptNote = (text, label) => {
+    if (failureIteration <= 1) {
+      return text;
+    }
+    const base = typeof text === 'string' ? text : '';
+    const note = `[試行${failureIteration}回目] ${label}`;
+    if (!base) {
+      return note;
+    }
+    return base.includes(note) ? base : `${base}\n${note}`;
+  };
+
+  const contextualFailureDetail = appendAttemptNote(failureDetail, '最新の失敗メッセージ');
+  const contextualStepStderr = appendAttemptNote(stepStderr, 'コマンド stderr 抜粋');
+  const contextualAggregatedStderr = appendAttemptNote(aggregatedStderr, '集約 stderr');
+  const contextualResponseText = appendAttemptNote(responseText, 'AI からの応答要約');
 
   const failureContext = useMemo(
     () => ({
-      message: failureDetail,
+      message: contextualFailureDetail,
       payload: {
-        detail: failureDetail,
-        responseText,
+        detail: contextualFailureDetail,
+        responseText: contextualResponseText,
         phases: [
           { id: 'plan', status: 'success', title: 'Plan' },
           { id: 'execute', status: 'failed', title: 'Execute' }
@@ -68,7 +87,7 @@ export default function ErrorRetryTestScreen() {
           exitCode: 1,
           timedOut: false,
           stdout: '',
-          stderr: aggregatedStderr,
+          stderr: contextualAggregatedStderr,
           resolvedOutputs: [],
           dryRun: false,
           steps: [
@@ -79,29 +98,37 @@ export default function ErrorRetryTestScreen() {
               exitCode: 1,
               timedOut: false,
               stdout: '',
-              stderr: stepStderr
+              stderr: contextualStepStderr
             }
           ]
         }
       }
     }),
-    [aggregatedStderr, failureDetail, responseText, stepStderr]
+    [contextualAggregatedStderr, contextualFailureDetail, contextualResponseText, contextualStepStderr]
   );
 
   const helperMessages = MESSAGES.workflow.helper;
 
   const handleRetryFromError = () => {
-    const prompt = buildErrorRetryTask(originalTask, failureContext);
+    const baseTask = lastSubmittedTask || taskValue || originalTask;
+    const prompt = buildErrorRetryTask(baseTask, failureContext);
     setTaskValue(prompt);
     setLatestPrompt(prompt);
     setShowErrorBanner(true);
   };
 
   const handleResetScenario = () => {
-    setTaskValue(originalTask);
+    setOriginalTask(ORIGINAL_TASK_DEFAULT);
+    setFailureDetail(FAILURE_DETAIL_DEFAULT);
+    setStepStderr(STDERR_DETAIL_DEFAULT);
+    setAggregatedStderr(AGGREGATED_STDERR_DEFAULT);
+    setResponseText(RESPONSE_TEXT_DEFAULT);
+    setTaskValue(ORIGINAL_TASK_DEFAULT);
     setLatestPrompt('');
     setShowErrorBanner(true);
     setSelectedFiles([]);
+    setLastSubmittedTask('');
+    setFailureIteration(1);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -124,6 +151,10 @@ export default function ErrorRetryTestScreen() {
 
   const handleSubmitTaskForm = (event) => {
     event.preventDefault();
+    setLastSubmittedTask(taskValue);
+    setFailureIteration((previous) => previous + 1);
+    setLatestPrompt('');
+    setShowErrorBanner(true);
   };
 
   return (
@@ -142,6 +173,7 @@ export default function ErrorRetryTestScreen() {
           <p className="note">
             各項目を編集すると次回「エラーから再編集」を押した際に反映されます。
           </p>
+          <p className="note">現在の失敗回数: {failureIteration} 回</p>
           <label className="field">
             <span>元のタスク入力</span>
             <textarea
@@ -151,6 +183,9 @@ export default function ErrorRetryTestScreen() {
                 setOriginalTask(nextValue);
                 if (!latestPrompt) {
                   setTaskValue(nextValue);
+                }
+                if (!lastSubmittedTask) {
+                  setLastSubmittedTask(nextValue);
                 }
               }}
               rows={3}
@@ -224,7 +259,7 @@ export default function ErrorRetryTestScreen() {
             isSubmitting={false}
             outputs={[]}
             showErrorBanner={showErrorBanner}
-            errorMessage={failureDetail}
+            errorMessage={contextualFailureDetail}
             onRetryFromError={handleRetryFromError}
             complaintText=""
             complaintError=""
