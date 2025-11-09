@@ -92,3 +92,5 @@ tmp_*
 ffmpeg2pass-*
 
 AGENTS.md
+
+package-lock.json
